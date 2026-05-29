@@ -35,12 +35,15 @@
   #enable:active { transform: scale(0.96); }
   #enable.hidden { opacity: 0; pointer-events: none; }
 
-  /* Smoothing toggle */
-  #smoothToggle {
+  /* Toggle group */
+  #toggles {
     position: fixed;
     left: calc(env(safe-area-inset-left, 0px) + 16px);
     bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
     z-index: 10;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  #toggles label {
     display: flex; align-items: center; gap: 8px;
     padding: 9px 14px;
     border: 1px solid rgba(255,255,255,0.25);
@@ -51,13 +54,16 @@
     cursor: pointer;
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   }
-  #smoothToggle input { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; }
+  #toggles input { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; }
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
   <button id="enable" class="hidden">Tap to activate</button>
-  <label id="smoothToggle"><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
+  <div id="toggles">
+    <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
+    <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
+  </div>
 
 <script>
 (() => {
@@ -67,11 +73,15 @@
   const ctx = canvas.getContext("2d");
   const enableBtn = document.getElementById("enable");
   const smoothCheck = document.getElementById("smoothCheck");
+  const predictCheck = document.getElementById("predictCheck");
 
-  // When off, the rendered vector snaps straight to the latest reading
-  // instead of being eased toward it.
+  // Smoothing: when off, snap to the target instead of easing toward it.
+  // Prediction: when off, reproduce the pre-update behavior (ease toward the
+  // raw reading with no extrapolation) for an A/B comparison.
   let smoothing = true;
+  let prediction = true;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
+  predictCheck.addEventListener("change", () => { prediction = predictCheck.checked; });
 
   // --- Tunables ---------------------------------------------------------
   const DOT_RADIUS = 1;          // 2px dots
@@ -85,6 +95,7 @@
   const MAX_LEAD_ANGLE = 0.6;    // clamp on predicted rotation (radians)
   const VEL_SMOOTH = 0.35;       // angular-velocity smoothing (0-1)
   const CUR_SMOOTH = 0.5;        // light de-jitter easing toward the prediction
+  const OLD_SMOOTH = 0.15;       // pre-update easing (used when prediction off)
   const STALE_MS = 120;          // drop velocity if readings stop coming
 
   // --- Dot grid ---------------------------------------------------------
@@ -232,13 +243,17 @@
     let predAngle = angSpeed * lead + 0.5 * accel * lead * lead * ACCEL_GAIN;
     if (predAngle > MAX_LEAD_ANGLE) predAngle = MAX_LEAD_ANGLE;
     else if (predAngle < -MAX_LEAD_ANGLE) predAngle = -MAX_LEAD_ANGLE;
-    const predicted = rotateAround(measVec, angAxis, predAngle);
 
-    // Ease toward the prediction (light de-jitter); snap if smoothing is off.
-    const kSmooth = smoothing ? CUR_SMOOTH : 1;
-    cur[0] += (predicted[0] - cur[0]) * kSmooth;
-    cur[1] += (predicted[1] - cur[1]) * kSmooth;
-    cur[2] += (predicted[2] - cur[2]) * kSmooth;
+    // Target the prediction when on; otherwise the raw reading (pre-update).
+    const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
+
+    // Ease toward the target; snap if smoothing is off. With prediction off we
+    // use the original 0.15 easing so the comparison is faithful.
+    let kSmooth = prediction ? CUR_SMOOTH : OLD_SMOOTH;
+    if (!smoothing) kSmooth = 1;
+    cur[0] += (target[0] - cur[0]) * kSmooth;
+    cur[1] += (target[1] - cur[1]) * kSmooth;
+    cur[2] += (target[2] - cur[2]) * kSmooth;
     const len = Math.hypot(cur[0], cur[1], cur[2]) || 1;
     const vx = cur[0] / len, vy = cur[1] / len, vz = cur[2] / len;
 
