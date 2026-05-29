@@ -34,11 +34,30 @@
   }
   #enable:active { transform: scale(0.96); }
   #enable.hidden { opacity: 0; pointer-events: none; }
+
+  /* Smoothing toggle */
+  #smoothToggle {
+    position: fixed;
+    left: calc(env(safe-area-inset-left, 0px) + 16px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+    z-index: 10;
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 999px;
+    background: rgba(20,22,30,0.6);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    color: #fff; font-size: 13px; font-weight: 600; letter-spacing: 0.2px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  #smoothToggle input { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; }
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
   <button id="enable" class="hidden">Tap to activate</button>
+  <label id="smoothToggle"><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
 
 <script>
 (() => {
@@ -47,6 +66,12 @@
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d");
   const enableBtn = document.getElementById("enable");
+  const smoothCheck = document.getElementById("smoothCheck");
+
+  // When off, the rendered vector snaps straight to the latest reading
+  // instead of being eased toward it.
+  let smoothing = true;
+  smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
 
   // --- Tunables ---------------------------------------------------------
   const DOT_RADIUS = 1;          // 2px dots
@@ -134,10 +159,12 @@
 
   // --- Render loop ------------------------------------------------------
   function frame() {
-    // Smooth toward the latest orientation, then renormalize.
-    cur[0] += (targetVec[0] - cur[0]) * 0.15;
-    cur[1] += (targetVec[1] - cur[1]) * 0.15;
-    cur[2] += (targetVec[2] - cur[2]) * 0.15;
+    // Smooth toward the latest orientation, then renormalize. With smoothing
+    // off, snap straight to the latest reading (no easing lag).
+    const k = smoothing ? 0.15 : 1;
+    cur[0] += (targetVec[0] - cur[0]) * k;
+    cur[1] += (targetVec[1] - cur[1]) * k;
+    cur[2] += (targetVec[2] - cur[2]) * k;
     const len = Math.hypot(cur[0], cur[1], cur[2]) || 1;
     const vx = cur[0] / len, vy = cur[1] / len, vz = cur[2] / len;
 
