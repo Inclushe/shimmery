@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#05060a" />
-<title>Hologram Dots</title>
+<title>Dots</title>
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,23 +34,11 @@
   }
   #enable:active { transform: scale(0.96); }
   #enable.hidden { opacity: 0; pointer-events: none; }
-
-  #hint {
-    position: fixed;
-    left: 50%; transform: translateX(-50%);
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
-    z-index: 5;
-    color: rgba(255,255,255,0.55);
-    font-size: 12.5px; letter-spacing: 0.3px; text-align: center;
-    padding: 0 20px; pointer-events: none;
-    transition: opacity .4s ease;
-  }
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
   <button id="enable" class="hidden">Tap to activate</button>
-  <div id="hint">Tilt your phone to shift the hologram</div>
 
 <script>
 (() => {
@@ -59,20 +47,12 @@
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d");
   const enableBtn = document.getElementById("enable");
-  const hint = document.getElementById("hint");
-
-  // --- Tilt state (smoothed), driven by the accelerometer ---------------
-  // tx / ty are the current tilt direction in the range ~[-1, 1].
-  let tx = 0, ty = 0;          // smoothed
-  let rawTx = 0, rawTy = 0;    // latest sensor target
-  let shimmer = 0;             // extra hue spin from sudden motion
-  let lastMag = 9.81;
-  let hasMotion = false;
 
   // --- Dot grid ---------------------------------------------------------
   let dots = [];
-  let cols = 0, rows = 0, spacing = 0, baseRadius = 0;
+  let cols = 0, rows = 0, spacing = 0;
   let W = 0, H = 0, dpr = 1;
+  const DOT_RADIUS = 1; // 2px dots
 
   function buildGrid() {
     dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -86,131 +66,43 @@
 
     // Density scales with screen size; aim for a tight dotted texture.
     spacing = Math.max(16, Math.min(W, H) / 26);
-    baseRadius = spacing * 0.30;
     cols = Math.ceil(W / spacing) + 1;
     rows = Math.ceil(H / spacing) + 1;
 
     dots = [];
     for (let j = 0; j < rows; j++) {
       for (let i = 0; i < cols; i++) {
-        // Slight random jitter + per-dot phase so the field looks organic,
-        // not like a perfect printed grid.
+        // Slight random jitter so the field looks organic, not like a
+        // perfect printed grid.
         dots.push({
           x: i * spacing + (Math.random() - 0.5) * spacing * 0.25,
           y: j * spacing + (Math.random() - 0.5) * spacing * 0.25,
-          phase: Math.random() * Math.PI * 2,
-          rScale: 0.7 + Math.random() * 0.6,
-          colored: Math.random() < 0.82, // most dots iridesce, some stay dim
         });
       }
     }
+    draw();
   }
 
-  // --- Motion handling --------------------------------------------------
+  // --- Render -----------------------------------------------------------
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#05060a";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "#888";
+    for (let k = 0; k < dots.length; k++) {
+      const d = dots[k];
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // --- Motion handling (scaffolding, no visual effect for now) ----------
   function onMotion(e) {
     const g = e.accelerationIncludingGravity;
     if (!g || (g.x == null && g.y == null && g.z == null)) return;
-    hasMotion = true;
-    hideHintSoon();
-
-    // Map gravity vector to a tilt direction. Normalize by gravity magnitude
-    // so it behaves consistently regardless of device.
-    const x = g.x || 0, y = g.y || 0, z = g.z || 0;
-    rawTx = Math.max(-1, Math.min(1, x / 9.81));
-    rawTy = Math.max(-1, Math.min(1, y / 9.81));
-
-    // Sudden movement (delta from steady gravity) feeds the shimmer spin.
-    const mag = Math.sqrt(x * x + y * y + z * z);
-    shimmer += Math.min(1.2, Math.abs(mag - lastMag) * 0.12);
-    lastMag = mag;
-  }
-
-  // --- Pointer fallback (desktop / no-sensor) ---------------------------
-  function onPointer(e) {
-    if (hasMotion) return; // real sensor wins
-    const px = (e.clientX / W) * 2 - 1;
-    const py = (e.clientY / H) * 2 - 1;
-    rawTx = px; rawTy = py;
-    shimmer = Math.min(3, shimmer + 0.05);
-    hideHintSoon();
-  }
-
-  // --- Render loop ------------------------------------------------------
-  function frame(t) {
-    // Smooth the tilt for fluid motion.
-    tx += (rawTx - tx) * 0.08;
-    ty += (rawTy - ty) * 0.08;
-    shimmer *= 0.94; // decay
-
-    const time = t * 0.001;
-
-    ctx.clearRect(0, 0, W, H);
-    // Deep background wash that subtly responds to tilt.
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, "#05060a");
-    bg.addColorStop(1, "#0a0c14");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
-
-    // Tilt magnitude controls how strongly the iridescence reads.
-    const tiltLen = Math.min(1, Math.hypot(tx, ty));
-    // Direction of the "light" sweeping across the field.
-    const ang = Math.atan2(ty, tx);
-    const dirX = Math.cos(ang), dirY = Math.sin(ang);
-
-    // Hologram band geometry: a bright specular line perpendicular to tilt.
-    const cx = W / 2, cy = H / 2;
-    const diag = Math.hypot(W, H);
-
-    for (let k = 0; k < dots.length; k++) {
-      const d = dots[k];
-      // Project the dot onto the tilt direction -> position along the rainbow.
-      const proj = ((d.x - cx) * dirX + (d.y - cy) * dirY) / diag; // ~[-0.7,0.7]
-
-      // Hue cycles along the projection; tilt + shimmer + time spin it.
-      let hue = (proj * 720 + (tx * 180) + shimmer * 60 + time * 8 + d.phase * 30) % 360;
-      if (hue < 0) hue += 360;
-
-      const lit = d.colored ? (0.45 + 0.55 * tiltLen) : 0.12;
-
-      // Specular highlight: dots near the moving band flare bright.
-      const band = Math.cos((proj * Math.PI * 3) - (tx * 2.2)) * 0.5 + 0.5;
-      const spec = Math.pow(band, 3) * tiltLen;
-
-      const sat = d.colored ? 85 : 0;
-      const light = (38 + 30 * lit) + spec * 45;
-      const r = baseRadius * d.rScale * (1 + spec * 0.5);
-
-      // Soft glow for the brightest dots.
-      if (spec > 0.25 && d.colored) {
-        ctx.beginPath();
-        ctx.fillStyle = `hsla(${hue}, ${sat}%, ${Math.min(95, light)}%, ${spec * 0.35})`;
-        ctx.arc(d.x, d.y, r * 2.6, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.beginPath();
-      ctx.fillStyle = `hsl(${hue}, ${sat}%, ${Math.min(92, light)}%)`;
-      ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Tiny white core gives the metallic foil glint.
-      if (spec > 0.45 && d.colored) {
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(255,255,255,${(spec - 0.45) * 0.9})`;
-        ctx.arc(d.x, d.y, r * 0.35, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    requestAnimationFrame(frame);
-  }
-
-  // --- Hint auto-hide ---------------------------------------------------
-  let hintTimer = null;
-  function hideHintSoon() {
-    if (hintTimer) return;
-    hintTimer = setTimeout(() => { hint.style.opacity = "0"; }, 2500);
+    // Sensor values available here as g.x / g.y / g.z — unused for now.
   }
 
   // --- Sensor permission flow ------------------------------------------
@@ -245,14 +137,10 @@
     startListening();
   }
 
-  // Pointer fallback so it's alive on desktop and before activation.
-  window.addEventListener("pointermove", onPointer, { passive: true });
-
   window.addEventListener("resize", buildGrid);
   window.addEventListener("orientationchange", () => setTimeout(buildGrid, 200));
 
   buildGrid();
-  requestAnimationFrame(frame);
 })();
 </script>
 </body>
