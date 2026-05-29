@@ -78,6 +78,15 @@
   const SPOT = 0.85;             // angular radius (radians) of the "lit" zone
   const BASE_GRAY = 60;          // brightness of a far-away dot (0-255)
 
+  // Orientation prediction (see frame()): we extrapolate the orientation
+  // vector forward by LEAD_MS to mask the sensor's latency.
+  const LEAD_MS = 90;            // how far ahead to predict (ms)
+  const ACCEL_GAIN = 1.0;        // how strongly acceleration extends the lead
+  const MAX_LEAD_ANGLE = 0.6;    // clamp on predicted rotation (radians)
+  const VEL_SMOOTH = 0.35;       // angular-velocity smoothing (0-1)
+  const CUR_SMOOTH = 0.5;        // light de-jitter easing toward the prediction
+  const STALE_MS = 120;          // drop velocity if readings stop coming
+
   // --- Dot grid ---------------------------------------------------------
   // Each dot also carries `target`: a random unit vector representing an
   // orientation it "responds" to. The closer the device's current
@@ -122,10 +131,18 @@
   }
 
   // --- Orientation -> direction vector ----------------------------------
-  // Current device orientation, smoothed, as a unit vector. This is the
-  // image of the screen normal [0,0,1] under the device's rotation.
-  let cur = [0, 0, 1];
-  let targetVec = [0, 0, 1];
+  // Current device orientation as a unit vector: the image of the screen
+  // normal [0,0,1] under the device's rotation.
+  let cur = [0, 0, 1];           // rendered (predicted) vector
+  let measVec = [0, 0, 1];       // latest measured vector
+
+  // Angular-velocity tracking, used to extrapolate `measVec` forward.
+  let prevMeas = null;           // previous measured vector
+  let prevMeasTime = 0;          // timestamp of that measurement (ms)
+  let angSpeed = 0;              // smoothed angular speed (rad/s)
+  let prevAngSpeed = 0;          // previous frame's speed, for acceleration
+  let angAxis = [0, 0, 1];       // axis the vector is rotating about
+  let lastFrameTime = 0;
 
   // Convert (alpha, beta, gamma) Euler angles (degrees, ZXY order per the
   // W3C DeviceOrientation spec) into a quaternion, then rotate [0,0,1].
@@ -152,19 +169,76 @@
     ];
   }
 
+  // Rotate vector `v` about unit axis `k` by `theta` radians (Rodrigues).
+  function rotateAround(v, k, theta) {
+    const c = Math.cos(theta), s = Math.sin(theta);
+    const kv = k[0] * v[0] + k[1] * v[1] + k[2] * v[2];
+    const cx = k[1] * v[2] - k[2] * v[1];
+    const cy = k[2] * v[0] - k[0] * v[2];
+    const cz = k[0] * v[1] - k[1] * v[0];
+    return [
+      v[0] * c + cx * s + k[0] * kv * (1 - c),
+      v[1] * c + cy * s + k[1] * kv * (1 - c),
+      v[2] * c + cz * s + k[2] * kv * (1 - c),
+    ];
+  }
+
+  // Take a freshly measured orientation vector and update both the latest
+  // value and the angular-velocity estimate (by finite difference). Shared
+  // by the sensor and the pointer fallback.
+  function ingestVector(newVec) {
+    const now = performance.now();
+    if (prevMeas) {
+      const dt = (now - prevMeasTime) / 1000;
+      if (dt > 0) {
+        let cosA = prevMeas[0] * newVec[0] + prevMeas[1] * newVec[1] + prevMeas[2] * newVec[2];
+        if (cosA > 1) cosA = 1; else if (cosA < -1) cosA = -1;
+        const angle = Math.acos(cosA);
+        // Rotation axis between the two samples = prevMeas x newVec.
+        let ax = prevMeas[1] * newVec[2] - prevMeas[2] * newVec[1];
+        let ay = prevMeas[2] * newVec[0] - prevMeas[0] * newVec[2];
+        let az = prevMeas[0] * newVec[1] - prevMeas[1] * newVec[0];
+        const al = Math.hypot(ax, ay, az);
+        const instSpeed = angle / dt;
+        angSpeed += (instSpeed - angSpeed) * VEL_SMOOTH;
+        if (al > 1e-6) angAxis = [ax / al, ay / al, az / al];
+      }
+    }
+    prevMeas = newVec;
+    prevMeasTime = now;
+    measVec = newVec;
+  }
+
   function onOrientation(e) {
     if (e.alpha == null && e.beta == null && e.gamma == null) return;
-    targetVec = orientationToVector(e.alpha, e.beta, e.gamma);
+    ingestVector(orientationToVector(e.alpha, e.beta, e.gamma));
   }
 
   // --- Render loop ------------------------------------------------------
-  function frame() {
-    // Smooth toward the latest orientation, then renormalize. With smoothing
-    // off, snap straight to the latest reading (no easing lag).
-    const k = smoothing ? 0.15 : 1;
-    cur[0] += (targetVec[0] - cur[0]) * k;
-    cur[1] += (targetVec[1] - cur[1]) * k;
-    cur[2] += (targetVec[2] - cur[2]) * k;
+  function frame(ts) {
+    const now = ts || performance.now();
+    const frameDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
+    lastFrameTime = now;
+
+    // If readings have stopped arriving (device held still), relax the
+    // velocity so the prediction doesn't keep drifting.
+    if (now - prevMeasTime > STALE_MS) angSpeed = 0;
+
+    // Predict the orientation LEAD_MS ahead: velocity term + an acceleration
+    // term that pushes further when speeding up and pulls back when slowing.
+    const accel = frameDt > 0 ? (angSpeed - prevAngSpeed) / frameDt : 0;
+    prevAngSpeed = angSpeed;
+    const lead = LEAD_MS / 1000;
+    let predAngle = angSpeed * lead + 0.5 * accel * lead * lead * ACCEL_GAIN;
+    if (predAngle > MAX_LEAD_ANGLE) predAngle = MAX_LEAD_ANGLE;
+    else if (predAngle < -MAX_LEAD_ANGLE) predAngle = -MAX_LEAD_ANGLE;
+    const predicted = rotateAround(measVec, angAxis, predAngle);
+
+    // Ease toward the prediction (light de-jitter); snap if smoothing is off.
+    const kSmooth = smoothing ? CUR_SMOOTH : 1;
+    cur[0] += (predicted[0] - cur[0]) * kSmooth;
+    cur[1] += (predicted[1] - cur[1]) * kSmooth;
+    cur[2] += (predicted[2] - cur[2]) * kSmooth;
     const len = Math.hypot(cur[0], cur[1], cur[2]) || 1;
     const vx = cur[0] / len, vy = cur[1] / len, vz = cur[2] / len;
 
@@ -200,7 +274,7 @@
     const px = (e.clientX / W) * 2 - 1;   // -1..1
     const py = (e.clientY / H) * 2 - 1;   // -1..1
     const v = [px, py, Math.sqrt(Math.max(0, 1 - px * px - py * py))];
-    targetVec = v;
+    ingestVector(v);
   }
 
   // --- Sensor permission flow ------------------------------------------
