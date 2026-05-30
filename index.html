@@ -54,7 +54,9 @@
     cursor: pointer;
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   }
-  #toggles input { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; }
+  #toggles input[type="checkbox"] { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; }
+  #densityRow { gap: 10px; }
+  #densityRow input[type="range"] { width: 110px; accent-color: #fff; cursor: pointer; }
 
   /* Info button (bottom-right) */
   #infoBtn {
@@ -112,6 +114,7 @@
   <div id="toggles">
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
     <label><input type="checkbox" id="smoothCheck" /> Smoothing</label>
+    <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
   </div>
 
   <button id="infoBtn" aria-label="About">
@@ -146,6 +149,13 @@
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   predictCheck.addEventListener("change", () => { prediction = predictCheck.checked; });
 
+  // Density slider: higher = denser. Rebuilds the dot grid on change.
+  const densitySlider = document.getElementById("densitySlider");
+  densitySlider.addEventListener("input", () => {
+    densityDivisor = +densitySlider.value;
+    buildGrid();
+  });
+
   // Info modal open/close.
   const infoModal = document.getElementById("infoModal");
   document.getElementById("infoBtn").addEventListener("click", () => infoModal.classList.remove("hidden"));
@@ -174,6 +184,7 @@
   let dots = [];
   let cols = 0, rows = 0, spacing = 0;
   let W = 0, H = 0, dpr = 1;
+  let densityDivisor = 34;       // higher = smaller spacing = denser; set by slider
 
   // Pick a point uniformly at random on the unit sphere.
   function randomUnitVector() {
@@ -194,7 +205,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Density scales with screen size; aim for a tight dotted texture.
-    spacing = Math.max(14, Math.min(W, H) / 34);
+    spacing = Math.max(6, Math.min(W, H) / densityDivisor);
     cols = Math.ceil(W / spacing) + 1;
     rows = Math.ceil(H / spacing) + 1;
 
