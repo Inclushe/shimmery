@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#05060a" />
+<meta name="theme-color" content="#000000" />
 <title>Dots</title>
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #05060a; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
@@ -165,7 +165,7 @@
   // --- Tunables ---------------------------------------------------------
   const DOT_RADIUS = 1;          // 2px dots
   const SPOT = 0.85;             // angular radius (radians) of the "lit" zone
-  const BASE_GRAY = 60;          // brightness of a far-away dot (0-255)
+  const BASE_GRAY = 32;          // brightness of a far-away dot (0-255)
 
   // Orientation prediction (see frame()): we extrapolate the orientation
   // vector forward by LEAD_MS to mask the sensor's latency.
@@ -338,7 +338,7 @@
     const vx = cur[0] / len, vy = cur[1] / len, vz = cur[2] / len;
 
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = "#05060a";
+    ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, W, H);
 
     for (let k = 0; k < dots.length; k++) {
