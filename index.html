@@ -55,8 +55,8 @@
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   }
   #toggles input[type="checkbox"] { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; }
-  #densityRow { gap: 10px; }
-  #densityRow input[type="range"] { width: 110px; accent-color: #fff; cursor: pointer; }
+  #densityRow, #sizeRow { gap: 10px; }
+  #densityRow input[type="range"], #sizeRow input[type="range"] { width: 110px; accent-color: #fff; cursor: pointer; }
 
   /* Info button (bottom-right) */
   #infoBtn {
@@ -115,6 +115,7 @@
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
     <label><input type="checkbox" id="smoothCheck" /> Smoothing</label>
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
+    <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
   </div>
 
   <button id="infoBtn" aria-label="About">
@@ -156,6 +157,10 @@
     buildGrid();
   });
 
+  // Size slider: dot radius in px. No grid rebuild needed.
+  const sizeSlider = document.getElementById("sizeSlider");
+  sizeSlider.addEventListener("input", () => { dotRadius = +sizeSlider.value; });
+
   // Info modal open/close.
   const infoModal = document.getElementById("infoModal");
   document.getElementById("infoBtn").addEventListener("click", () => infoModal.classList.remove("hidden"));
@@ -163,7 +168,7 @@
   infoModal.addEventListener("click", (e) => { if (e.target === infoModal) infoModal.classList.add("hidden"); });
 
   // --- Tunables ---------------------------------------------------------
-  const DOT_RADIUS = 1;          // 2px dots
+  let dotRadius = 1;             // dot radius in px; set by the size slider
   const SPOT = 0.85;             // angular radius (radians) of the "lit" zone
   const BASE_GRAY = 32;          // brightness of a far-away dot (0-255)
 
@@ -355,7 +360,7 @@
 
       ctx.fillStyle = "rgb(" + g + "," + g + "," + g + ")";
       ctx.beginPath();
-      ctx.arc(d.x, d.y, DOT_RADIUS, 0, Math.PI * 2);
+      ctx.arc(d.x, d.y, dotRadius, 0, Math.PI * 2);
       ctx.fill();
     }
 
