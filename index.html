@@ -487,17 +487,17 @@
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
   const debugMetrics = [
     { label: "accel",   get: () => accelMag,      min: 0, max: 8,
-      ticks: [{ at: ACC_LOW, color: "#ff9b3b" }, { at: ACC_HIGH, color: "#ff5b5b" }],
-      color: (v) => v >= ACC_HIGH ? "#ff5b5b" : (v >= ACC_LOW ? "#ff9b3b" : "#5b9bff"),
+      ticks: [{ at: () => accLowV, color: "#ff9b3b" }, { at: () => accHighV, color: "#ff5b5b" }],
+      color: (v) => v >= accHighV ? "#ff5b5b" : (v >= accLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(2) },
     { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true,
-      ticks: [{ at: -JERK_HIGH, color: "#ff5b5b" }, { at: -JERK_LOW, color: "#ff9b3b" },
-              { at: JERK_LOW, color: "#ff9b3b" }, { at: JERK_HIGH, color: "#ff5b5b" }],
-      color: (v) => Math.abs(v) >= JERK_HIGH ? "#ff5b5b" : (Math.abs(v) >= JERK_LOW ? "#ff9b3b" : "#5b9bff"),
+      ticks: [{ at: () => -sjerkHighV, color: "#ff5b5b" }, { at: () => -sjerkLowV, color: "#ff9b3b" },
+              { at: () => sjerkLowV, color: "#ff9b3b" }, { at: () => sjerkHighV, color: "#ff5b5b" }],
+      color: (v) => Math.abs(v) >= sjerkHighV ? "#ff5b5b" : (Math.abs(v) >= sjerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     { label: "absJerk", get: () => absJerk,       min: 0, max: 50,
-      ticks: [{ at: ABSJERK_LOW, color: "#ff9b3b" }, { at: ABSJERK_HIGH, color: "#ff5b5b" }],
-      color: (v) => v >= ABSJERK_HIGH ? "#ff5b5b" : (v >= ABSJERK_LOW ? "#ff9b3b" : "#5b9bff"),
+      ticks: [{ at: () => ajerkLowV, color: "#ff9b3b" }, { at: () => ajerkHighV, color: "#ff5b5b" }],
+      color: (v) => v >= ajerkHighV ? "#ff5b5b" : (v >= ajerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     { label: "snap",    get: () => snapMag,       min: -500, max: 500, bip: true, fmt: (v) => v.toFixed(0) },
     { label: "tgtDamp", get: () => dbg.targetDamp, min: 0, max: 1, fmt: (v) => v.toFixed(2) },
@@ -532,12 +532,13 @@
       fill.className = "dbg-fill";
       track.appendChild(fill);
       if (m.ticks) {
+        m._tickEls = [];
         for (const t of m.ticks) {
           const tick = document.createElement("div");
           tick.className = "dbg-tick";
-          tick.style.left = (100 * (t.at - m.min) / (m.max - m.min)) + "%";
           tick.style.background = t.color;
           track.appendChild(tick);
+          m._tickEls.push(tick); // position set live in updateDebug
         }
       }
 
@@ -570,6 +571,14 @@
       }
       fill.style.background = m.color ? m.color(v) : ((m.warn && m.warn()) ? "#ff5b5b" : "#5b9bff");
       m._val.textContent = m.fmt(v);
+
+      // Reposition threshold ticks live (they track the debug-editable bands).
+      if (m._tickEls) {
+        for (let i = 0; i < m._tickEls.length; i++) {
+          const at = m.ticks[i].at();
+          m._tickEls[i].style.left = (100 * (at - m.min) / (m.max - m.min)) + "%";
+        }
+      }
     }
   }
 
