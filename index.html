@@ -150,6 +150,7 @@
   <div id="toggles">
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
     <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
+    <label><input type="checkbox" id="jerkCheck" checked /> Jerk guard</label>
     <label><input type="checkbox" id="smoothCheck" /> Smoothing</label>
     <label><input type="checkbox" id="debugCheck" /> Debug</label>
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
@@ -182,18 +183,22 @@
   const smoothCheck = document.getElementById("smoothCheck");
   const predictCheck = document.getElementById("predictCheck");
   const accelCheck = document.getElementById("accelCheck");
+  const jerkCheck = document.getElementById("jerkCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
   // Prediction: when off, reproduce the pre-update behavior (ease toward the
   // raw reading with no extrapolation) for an A/B comparison.
   // Accel guard: when on, damp the prediction while linear acceleration is
   // high (e.g. shoving the phone) so jitter isn't amplified into flicker.
+  // Jerk guard: same idea, but keyed off jerk (rate of change of acceleration).
   let smoothing = false;
   let prediction = true;
   let accelGuard = true;
+  let jerkGuard = true;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   predictCheck.addEventListener("change", () => { prediction = predictCheck.checked; });
   accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
+  jerkCheck.addEventListener("change", () => { jerkGuard = jerkCheck.checked; });
 
   // Debug overlay: when on, show a live readout of the internal signals that
   // drive the effect (accel magnitude, damping, angular velocity, vectors).
@@ -242,6 +247,10 @@
   const ACC_LOW = 3;             // below this (m/s^2) prediction is untouched
   const ACC_HIGH = 4;            // above this the prediction is fully damped
   const ACC_SMOOTH = 0.4;        // EMA factor for the accel magnitude
+
+  // Jerk guard: same ramp keyed off |jerk| (rate of change of acceleration).
+  const JERK_LOW = 10;           // below this (m/s^3) prediction is untouched
+  const JERK_HIGH = 15;          // above this the prediction is fully damped
 
   // --- Dot grid ---------------------------------------------------------
   // Each dot also carries `target`: a random unit vector representing an
@@ -301,7 +310,7 @@
   let angAxis = [0, 0, 1];       // axis the vector is rotating about
   let lastFrameTime = 0;
   let accelMag = 0;              // smoothed linear-acceleration magnitude (m/s^2)
-  let jerkMag = 0;               // smoothed jerk = d(accelMag)/dt (m/s^3); debug-only for now
+  let jerkMag = 0;               // smoothed jerk = d(accelMag)/dt (m/s^3); drives the Jerk guard
   let prevAccelMag = 0;          // previous accel magnitude, for the jerk finite-difference
   let prevMotionTime = 0;        // timestamp of the last devicemotion sample (ms)
 
@@ -396,14 +405,15 @@
 
   // --- Debug overlay ----------------------------------------------------
   // Values computed inside frame() that the overlay needs to read back.
-  const dbg = { damp: 1, predAngle: 0, fps: 0 };
+  const dbg = { damp: 1, accDamp: 1, jerkDamp: 1, predAngle: 0, fps: 0 };
 
   // Each metric: a live accessor, a bar range, and a formatter. `bip` draws a
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
   const debugMetrics = [
     { label: "accel",   get: () => accelMag,      min: 0, max: 8,
-      ticks: [ACC_LOW, ACC_HIGH], warn: () => dbg.damp < 1, fmt: (v) => v.toFixed(2) },
-    { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true, fmt: (v) => v.toFixed(1) },
+      ticks: [ACC_LOW, ACC_HIGH], warn: () => accelGuard && dbg.accDamp < 1, fmt: (v) => v.toFixed(2) },
+    { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true,
+      warn: () => jerkGuard && dbg.jerkDamp < 1, fmt: (v) => v.toFixed(1) },
     { label: "damp",    get: () => dbg.damp,      min: 0, max: 1, fmt: (v) => v.toFixed(2) },
     { label: "angVel",  get: () => angSpeed,      min: 0, max: 6, fmt: (v) => v.toFixed(2) },
     { label: "predAng", get: () => dbg.predAngle, min: -MAX_LEAD_ANGLE, max: MAX_LEAD_ANGLE, bip: true, fmt: (v) => v.toFixed(3) },
@@ -496,10 +506,20 @@
 
     // Accel guard: as linear acceleration rises from ACC_LOW to ACC_HIGH, ramp
     // the prediction down to zero so a fast shove can't amplify jitter.
-    // (Always computed so the debug overlay can show it; applied only when on.)
-    let damp = 1 - (accelMag - ACC_LOW) / (ACC_HIGH - ACC_LOW);
-    if (damp < 0) damp = 0; else if (damp > 1) damp = 1;
-    if (accelGuard) predAngle *= damp;
+    let accDamp = 1 - (accelMag - ACC_LOW) / (ACC_HIGH - ACC_LOW);
+    if (accDamp < 0) accDamp = 0; else if (accDamp > 1) accDamp = 1;
+
+    // Jerk guard: same ramp keyed off the magnitude of the jerk.
+    const absJerk = jerkMag < 0 ? -jerkMag : jerkMag;
+    let jerkDamp = 1 - (absJerk - JERK_LOW) / (JERK_HIGH - JERK_LOW);
+    if (jerkDamp < 0) jerkDamp = 0; else if (jerkDamp > 1) jerkDamp = 1;
+
+    // Effective damping = product of the enabled guards. (Ramps are always
+    // computed so the debug overlay can show them; applied only when on.)
+    let damp = 1;
+    if (accelGuard) damp *= accDamp;
+    if (jerkGuard) damp *= jerkDamp;
+    predAngle *= damp;
 
     // Target the prediction when on; otherwise the raw reading (pre-update).
     const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
@@ -538,6 +558,8 @@
 
     if (debugOn) {
       dbg.damp = damp;
+      dbg.accDamp = accDamp;
+      dbg.jerkDamp = jerkDamp;
       dbg.predAngle = predAngle;
       if (frameDt > 0) dbg.fps += (1 / frameDt - dbg.fps) * 0.1;
       updateDebug();
