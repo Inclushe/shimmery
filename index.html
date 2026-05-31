@@ -106,6 +106,42 @@
     font-size: 26px; line-height: 1; cursor: pointer; padding: 4px;
   }
   #infoClose:active { color: #fff; }
+
+  /* Debug overlay (top-left), toggled by the Debug checkbox */
+  #debug {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 16px);
+    left: calc(env(safe-area-inset-left, 0px) + 16px);
+    z-index: 15;
+    width: 232px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    background: rgba(10,12,18,0.72);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #d8dde8;
+    pointer-events: none; /* never intercept taps meant for the canvas */
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  #debug.hidden { display: none; }
+  #debug h3 {
+    font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+    color: rgba(255,255,255,.5); margin-bottom: 6px;
+  }
+  .dbg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  .dbg-label { width: 58px; color: rgba(255,255,255,.65); white-space: nowrap; }
+  .dbg-track {
+    position: relative; flex: 1; height: 8px; border-radius: 2px;
+    background: rgba(255,255,255,.08); overflow: hidden;
+  }
+  .dbg-fill { position: absolute; top: 0; bottom: 0; background: #5b9bff; border-radius: 2px; }
+  .dbg-track.bip::before { /* center line for bipolar (-/+) metrics */
+    content: ""; position: absolute; left: 50%; top: 0; bottom: 0;
+    width: 1px; background: rgba(255,255,255,.25);
+  }
+  .dbg-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,90,90,.7); }
+  .dbg-val { width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -115,9 +151,12 @@
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
     <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
     <label><input type="checkbox" id="smoothCheck" /> Smoothing</label>
+    <label><input type="checkbox" id="debugCheck" /> Debug</label>
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
     <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
   </div>
+
+  <div id="debug" class="hidden" aria-hidden="true"></div>
 
   <button id="infoBtn" aria-label="About">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
@@ -155,6 +194,16 @@
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   predictCheck.addEventListener("change", () => { prediction = predictCheck.checked; });
   accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
+
+  // Debug overlay: when on, show a live readout of the internal signals that
+  // drive the effect (accel magnitude, damping, angular velocity, vectors).
+  const debugCheck = document.getElementById("debugCheck");
+  const debugPanel = document.getElementById("debug");
+  let debugOn = false;
+  debugCheck.addEventListener("change", () => {
+    debugOn = debugCheck.checked;
+    debugPanel.classList.toggle("hidden", !debugOn);
+  });
 
   // Density slider: higher = denser. Rebuilds the dot grid on change.
   const densitySlider = document.getElementById("densitySlider");
@@ -332,6 +381,86 @@
     accelMag += (m - accelMag) * ACC_SMOOTH;
   }
 
+  // --- Debug overlay ----------------------------------------------------
+  // Values computed inside frame() that the overlay needs to read back.
+  const dbg = { damp: 1, predAngle: 0, fps: 0 };
+
+  // Each metric: a live accessor, a bar range, and a formatter. `bip` draws a
+  // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
+  const debugMetrics = [
+    { label: "accel",   get: () => accelMag,      min: 0, max: 8,
+      ticks: [ACC_LOW, ACC_HIGH], warn: () => dbg.damp < 1, fmt: (v) => v.toFixed(2) },
+    { label: "damp",    get: () => dbg.damp,      min: 0, max: 1, fmt: (v) => v.toFixed(2) },
+    { label: "angVel",  get: () => angSpeed,      min: 0, max: 6, fmt: (v) => v.toFixed(2) },
+    { label: "predAng", get: () => dbg.predAngle, min: -MAX_LEAD_ANGLE, max: MAX_LEAD_ANGLE, bip: true, fmt: (v) => v.toFixed(3) },
+    { label: "meas x",  get: () => measVec[0],    min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "meas y",  get: () => measVec[1],    min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "meas z",  get: () => measVec[2],    min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "pred x",  get: () => cur[0],        min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "pred y",  get: () => cur[1],        min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "pred z",  get: () => cur[2],        min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "fps",     get: () => dbg.fps,       min: 0, max: 120, fmt: (v) => v.toFixed(0) },
+  ];
+
+  // Build the rows once and cache the fill/value elements for fast updates.
+  function buildDebug() {
+    const head = document.createElement("h3");
+    head.textContent = "Debug";
+    debugPanel.appendChild(head);
+    for (const m of debugMetrics) {
+      const row = document.createElement("div");
+      row.className = "dbg-row";
+
+      const label = document.createElement("span");
+      label.className = "dbg-label";
+      label.textContent = m.label;
+
+      const track = document.createElement("div");
+      track.className = "dbg-track" + (m.bip ? " bip" : "");
+      const fill = document.createElement("div");
+      fill.className = "dbg-fill";
+      track.appendChild(fill);
+      if (m.ticks) {
+        for (const t of m.ticks) {
+          const tick = document.createElement("div");
+          tick.className = "dbg-tick";
+          tick.style.left = (100 * (t - m.min) / (m.max - m.min)) + "%";
+          track.appendChild(tick);
+        }
+      }
+
+      const val = document.createElement("span");
+      val.className = "dbg-val";
+
+      row.appendChild(label);
+      row.appendChild(track);
+      row.appendChild(val);
+      debugPanel.appendChild(row);
+      m._fill = fill;
+      m._val = val;
+    }
+  }
+
+  // Map each metric to a bar width/position and refresh its number.
+  function updateDebug() {
+    for (const m of debugMetrics) {
+      const v = m.get();
+      let pct = (v - m.min) / (m.max - m.min);
+      if (pct < 0) pct = 0; else if (pct > 1) pct = 1;
+      const fill = m._fill;
+      if (m.bip) {
+        // Grow out from the 50% center line in either direction.
+        if (pct >= 0.5) { fill.style.left = "50%"; fill.style.width = ((pct - 0.5) * 100) + "%"; }
+        else { fill.style.left = (pct * 100) + "%"; fill.style.width = ((0.5 - pct) * 100) + "%"; }
+      } else {
+        fill.style.left = "0";
+        fill.style.width = (pct * 100) + "%";
+      }
+      fill.style.background = (m.warn && m.warn()) ? "#ff5b5b" : "#5b9bff";
+      m._val.textContent = m.fmt(v);
+    }
+  }
+
   // --- Render loop ------------------------------------------------------
   function frame(ts) {
     const now = ts || performance.now();
@@ -353,11 +482,10 @@
 
     // Accel guard: as linear acceleration rises from ACC_LOW to ACC_HIGH, ramp
     // the prediction down to zero so a fast shove can't amplify jitter.
-    if (accelGuard) {
-      let damp = 1 - (accelMag - ACC_LOW) / (ACC_HIGH - ACC_LOW);
-      if (damp < 0) damp = 0; else if (damp > 1) damp = 1;
-      predAngle *= damp;
-    }
+    // (Always computed so the debug overlay can show it; applied only when on.)
+    let damp = 1 - (accelMag - ACC_LOW) / (ACC_HIGH - ACC_LOW);
+    if (damp < 0) damp = 0; else if (damp > 1) damp = 1;
+    if (accelGuard) predAngle *= damp;
 
     // Target the prediction when on; otherwise the raw reading (pre-update).
     const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
@@ -392,6 +520,13 @@
       ctx.beginPath();
       ctx.arc(d.x, d.y, dotRadius, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    if (debugOn) {
+      dbg.damp = damp;
+      dbg.predAngle = predAngle;
+      if (frameDt > 0) dbg.fps += (1 / frameDt - dbg.fps) * 0.1;
+      updateDebug();
     }
 
     requestAnimationFrame(frame);
@@ -455,6 +590,7 @@
   window.addEventListener("resize", buildGrid);
   window.addEventListener("orientationchange", () => setTimeout(buildGrid, 200));
 
+  buildDebug();
   buildGrid();
   requestAnimationFrame(frame);
 })();
