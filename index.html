@@ -170,6 +170,7 @@
     <label><input type="checkbox" id="ajerkCheck" checked /> Absolute jerk guard</label>
     <div class="thresh"><span>low</span><input type="number" id="ajerkLowInput" step="1" /><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
     <label><input type="checkbox" id="attackCheck" /> Attack/release</label>
+    <div class="thresh"><span>release ms</span><input type="number" id="releaseInput" step="50" /></div>
     <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
     <label><input type="checkbox" id="debugCheck" /> Debug</label>
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
@@ -298,6 +299,7 @@
   let accLowV = ACC_LOW, accHighV = ACC_HIGH;
   let sjerkLowV = JERK_LOW, sjerkHighV = JERK_HIGH;
   let ajerkLowV = ABSJERK_LOW, ajerkHighV = ABSJERK_HIGH;
+  let guardReleaseV = GUARD_RELEASE_MS;
 
   // Bind a number input to a setter, seeded with the constant default.
   function bindThreshold(id, initial, set) {
@@ -314,6 +316,7 @@
   bindThreshold("sjerkHighInput", JERK_HIGH, (v) => { sjerkHighV = v; });
   bindThreshold("ajerkLowInput", ABSJERK_LOW, (v) => { ajerkLowV = v; });
   bindThreshold("ajerkHighInput", ABSJERK_HIGH, (v) => { ajerkHighV = v; });
+  bindThreshold("releaseInput", GUARD_RELEASE_MS, (v) => { guardReleaseV = v; });
 
   // --- Dot grid ---------------------------------------------------------
   // Each dot also carries `target`: a random unit vector representing an
@@ -628,13 +631,14 @@
     if (absJerkGuard) targetDamp *= aJerkDamp;
 
     // Attack/release: snap closed instantly when more damping is called for,
-    // but reopen slowly (over GUARD_RELEASE_MS) so a brief signal dip doesn't
+    // but reopen slowly (over the release time) so a brief signal dip doesn't
     // un-clamp the prediction mid-disturbance. When off, apply target directly.
+    const releaseMs = debugOn ? guardReleaseV : GUARD_RELEASE_MS;
     if (attackRelease) {
       if (targetDamp <= guardDamp) {
         guardDamp = targetDamp; // attack
       } else {
-        const k = 1 - Math.exp(-(frameDt * 1000) / GUARD_RELEASE_MS); // release
+        const k = 1 - Math.exp(-(frameDt * 1000) / releaseMs); // release
         guardDamp += (targetDamp - guardDamp) * k;
       }
     } else {
