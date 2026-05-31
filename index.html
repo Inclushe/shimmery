@@ -485,16 +485,16 @@
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
   const debugMetrics = [
     { label: "accel",   get: () => accelMag,      min: 0, max: 8, enabled: () => accelGuard,
-      ticks: [{ at: () => accLowV, color: "#ff9b3b" }, { at: () => accHighV, color: "#ff5b5b" }],
+      ticks: [{ at: () => accLowV, color: "#ff9b3b", dashed: true }, { at: () => accHighV, color: "#ff5b5b" }],
       color: (v) => v >= accHighV ? "#ff5b5b" : (v >= accLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(2) },
     { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true, enabled: () => signedJerkGuard,
-      ticks: [{ at: () => -sjerkHighV, color: "#ff5b5b" }, { at: () => -sjerkLowV, color: "#ff9b3b" },
-              { at: () => sjerkLowV, color: "#ff9b3b" }, { at: () => sjerkHighV, color: "#ff5b5b" }],
+      ticks: [{ at: () => -sjerkHighV, color: "#ff5b5b" }, { at: () => -sjerkLowV, color: "#ff9b3b", dashed: true },
+              { at: () => sjerkLowV, color: "#ff9b3b", dashed: true }, { at: () => sjerkHighV, color: "#ff5b5b" }],
       color: (v) => Math.abs(v) >= sjerkHighV ? "#ff5b5b" : (Math.abs(v) >= sjerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     { label: "absJerk", get: () => absJerk,       min: 0, max: 50, enabled: () => absJerkGuard,
-      ticks: [{ at: () => ajerkLowV, color: "#ff9b3b" }, { at: () => ajerkHighV, color: "#ff5b5b" }],
+      ticks: [{ at: () => ajerkLowV, color: "#ff9b3b", dashed: true }, { at: () => ajerkHighV, color: "#ff5b5b" }],
       color: (v) => v >= ajerkHighV ? "#ff5b5b" : (v >= ajerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     { label: "tgtDamp", get: () => dbg.targetDamp, min: 0, max: 1, fmt: (v) => v.toFixed(2) },
@@ -509,6 +509,14 @@
     { label: "pred z",  get: () => cur[2],        min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
     { label: "fps",     get: () => dbg.fps,       min: 0, max: 120, fmt: (v) => v.toFixed(0) },
   ];
+
+  // A tick's background: a solid line, or a dashed one (vertical repeating
+  // gradient) for the orange LOW thresholds.
+  function tickBg(color, dashed) {
+    return dashed
+      ? "repeating-linear-gradient(to bottom, " + color + " 0 2px, transparent 2px 4px)"
+      : color;
+  }
 
   // Build the rows once and cache the fill/value elements for fast updates.
   function buildDebug() {
@@ -533,7 +541,7 @@
         for (const t of m.ticks) {
           const tick = document.createElement("div");
           tick.className = "dbg-tick";
-          tick.style.background = t.color;
+          tick.style.background = tickBg(t.color, t.dashed);
           track.appendChild(tick);
           m._tickEls.push(tick); // position set live in updateDebug
         }
@@ -577,7 +585,8 @@
         for (let i = 0; i < m._tickEls.length; i++) {
           const at = m.ticks[i].at();
           m._tickEls[i].style.left = (100 * (at - m.min) / (m.max - m.min)) + "%";
-          m._tickEls[i].style.background = enabled ? m.ticks[i].color : "rgba(255,255,255,0.25)";
+          const tickColor = enabled ? m.ticks[i].color : "rgba(255,255,255,0.25)";
+          m._tickEls[i].style.background = tickBg(tickColor, m.ticks[i].dashed);
         }
       }
     }
