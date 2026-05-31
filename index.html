@@ -58,6 +58,20 @@
   #densityRow, #sizeRow { gap: 10px; }
   #densityRow input[type="range"], #sizeRow input[type="range"] { width: 110px; accent-color: #fff; cursor: pointer; }
 
+  /* Per-guard threshold editors, revealed only in debug mode */
+  .thresh { display: none; gap: 8px; margin: -2px 0 2px 14px; align-items: center; }
+  body.debug .thresh { display: flex; }
+  .thresh span {
+    color: rgba(255,255,255,0.7); font-size: 12px; font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .thresh input[type="number"] {
+    width: 52px; padding: 4px 6px;
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 8px;
+    background: rgba(20,22,30,0.6); color: #fff;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
   /* Info button (bottom-right) */
   #infoBtn {
     position: fixed;
@@ -150,8 +164,11 @@
   <div id="toggles">
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
     <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
+    <div class="thresh"><span>low</span><input type="number" id="accLowInput" step="0.5" /><span>high</span><input type="number" id="accHighInput" step="0.5" /></div>
     <label><input type="checkbox" id="sjerkCheck" /> Signed jerk guard</label>
+    <div class="thresh"><span>low</span><input type="number" id="sjerkLowInput" step="1" /><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
     <label><input type="checkbox" id="ajerkCheck" checked /> AbsJerk guard</label>
+    <div class="thresh"><span>low</span><input type="number" id="ajerkLowInput" step="1" /><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
     <label><input type="checkbox" id="attackCheck" /> Attack/release</label>
     <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
     <label><input type="checkbox" id="debugCheck" /> Debug</label>
@@ -221,6 +238,7 @@
   debugCheck.addEventListener("change", () => {
     debugOn = debugCheck.checked;
     debugPanel.classList.toggle("hidden", !debugOn);
+    document.body.classList.toggle("debug", debugOn); // reveals the threshold editors
   });
 
   // Density slider: higher = denser. Rebuilds the dot grid on change.
@@ -273,6 +291,29 @@
   // Attack/release: damping snaps closed instantly but reopens over this many
   // ms, bridging brief dips in the guard signal (e.g. jerk crossing zero).
   const GUARD_RELEASE_MS = 250;
+
+  // Live, debug-editable copies of each guard's LOW/HIGH band. Default to the
+  // constants above; the number inputs (visible only in debug mode) update
+  // these, and frame() uses them in place of the constants when debug is on.
+  let accLowV = ACC_LOW, accHighV = ACC_HIGH;
+  let sjerkLowV = JERK_LOW, sjerkHighV = JERK_HIGH;
+  let ajerkLowV = ABSJERK_LOW, ajerkHighV = ABSJERK_HIGH;
+
+  // Bind a number input to a setter, seeded with the constant default.
+  function bindThreshold(id, initial, set) {
+    const el = document.getElementById(id);
+    el.value = initial;
+    el.addEventListener("input", () => {
+      const v = parseFloat(el.value);
+      if (!Number.isNaN(v)) set(v);
+    });
+  }
+  bindThreshold("accLowInput", ACC_LOW, (v) => { accLowV = v; });
+  bindThreshold("accHighInput", ACC_HIGH, (v) => { accHighV = v; });
+  bindThreshold("sjerkLowInput", JERK_LOW, (v) => { sjerkLowV = v; });
+  bindThreshold("sjerkHighInput", JERK_HIGH, (v) => { sjerkHighV = v; });
+  bindThreshold("ajerkLowInput", ABSJERK_LOW, (v) => { ajerkLowV = v; });
+  bindThreshold("ajerkHighInput", ABSJERK_HIGH, (v) => { ajerkHighV = v; });
 
   // --- Dot grid ---------------------------------------------------------
   // Each dot also carries `target`: a random unit vector representing an
@@ -553,17 +594,23 @@
 
     // Accel guard: as linear acceleration rises from ACC_LOW to ACC_HIGH, ramp
     // the prediction down to zero so a fast shove can't amplify jitter.
-    let accDamp = 1 - (accelMag - ACC_LOW) / (ACC_HIGH - ACC_LOW);
+    // (In debug mode the band is taken from the live editors, else the constants.)
+    const accLow = debugOn ? accLowV : ACC_LOW;
+    const accHigh = debugOn ? accHighV : ACC_HIGH;
+    let accDamp = 1 - (accelMag - accLow) / (accHigh - accLow);
     if (accDamp < 0) accDamp = 0; else if (accDamp > 1) accDamp = 1;
 
-    // Signed jerk guard: ramp keyed off |smoothed signed jerk| (dips on a
-    // sign change). Uses the same JERK_LOW/HIGH band for now.
+    // Signed jerk guard: ramp keyed off |smoothed signed jerk| (dips on a sign change).
+    const sjerkLow = debugOn ? sjerkLowV : JERK_LOW;
+    const sjerkHigh = debugOn ? sjerkHighV : JERK_HIGH;
     const absSignedJerk = jerkMag < 0 ? -jerkMag : jerkMag;
-    let sJerkDamp = 1 - (absSignedJerk - JERK_LOW) / (JERK_HIGH - JERK_LOW);
+    let sJerkDamp = 1 - (absSignedJerk - sjerkLow) / (sjerkHigh - sjerkLow);
     if (sJerkDamp < 0) sJerkDamp = 0; else if (sJerkDamp > 1) sJerkDamp = 1;
 
     // AbsJerk guard: ramp keyed off the rectify-then-smooth envelope.
-    let aJerkDamp = 1 - (absJerk - ABSJERK_LOW) / (ABSJERK_HIGH - ABSJERK_LOW);
+    const ajerkLow = debugOn ? ajerkLowV : ABSJERK_LOW;
+    const ajerkHigh = debugOn ? ajerkHighV : ABSJERK_HIGH;
+    let aJerkDamp = 1 - (absJerk - ajerkLow) / (ajerkHigh - ajerkLow);
     if (aJerkDamp < 0) aJerkDamp = 0; else if (aJerkDamp > 1) aJerkDamp = 1;
 
     // Instantaneous target = product of the enabled guards. (Ramps are always
