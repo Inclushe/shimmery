@@ -375,9 +375,7 @@
   let accelMag = 0;              // smoothed linear-acceleration magnitude (m/s^2)
   let jerkMag = 0;               // smoothed jerk = d(accelMag)/dt (m/s^3); reference only
   let absJerk = 0;               // EMA of |raw jerk| (rectify-then-smooth envelope); drives the Jerk guard
-  let snapMag = 0;               // smoothed snap = d(jerkMag)/dt (m/s^4); debug-only for now
   let prevAccelMag = 0;          // previous accel magnitude, for the jerk finite-difference
-  let prevJerkMag = 0;           // previous jerk, for the snap finite-difference
   let prevMotionTime = 0;        // timestamp of the last devicemotion sample (ms)
   let guardDamp = 1;             // attack/release-held damping actually applied to the prediction
 
@@ -464,18 +462,15 @@
     // smoothed signed jerk for reference, plus `absJerk` — the rectify-then-
     // smooth envelope (EMA of |raw jerk|) that drives the guard; staying
     // non-negative, it doesn't dip through zero when jerk changes sign.
-    // Snap: rate of change of jerk, EMA-smoothed; debug-only for now.
     if (prevMotionTime) {
       const dt = (now - prevMotionTime) / 1000;
       if (dt > 0) {
         const rawJerk = (accelMag - prevAccelMag) / dt;
         jerkMag += (rawJerk - jerkMag) * ACC_SMOOTH;
         absJerk += (Math.abs(rawJerk) - absJerk) * ACC_SMOOTH;
-        snapMag += ((jerkMag - prevJerkMag) / dt - snapMag) * ACC_SMOOTH;
       }
     }
     prevAccelMag = accelMag;
-    prevJerkMag = jerkMag;
     prevMotionTime = now;
   }
 
@@ -499,7 +494,6 @@
       ticks: [{ at: () => ajerkLowV, color: "#ff9b3b" }, { at: () => ajerkHighV, color: "#ff5b5b" }],
       color: (v) => v >= ajerkHighV ? "#ff5b5b" : (v >= ajerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
-    { label: "snap",    get: () => snapMag,       min: -500, max: 500, bip: true, fmt: (v) => v.toFixed(0) },
     { label: "tgtDamp", get: () => dbg.targetDamp, min: 0, max: 1, fmt: (v) => v.toFixed(2) },
     { label: "damp",    get: () => dbg.damp,      min: 0, max: 1, fmt: (v) => v.toFixed(2) },
     { label: "angVel",  get: () => angSpeed,      min: 0, max: 6, fmt: (v) => v.toFixed(2) },
