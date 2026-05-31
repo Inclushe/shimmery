@@ -113,6 +113,7 @@
   <button id="enable" class="hidden">Tap to activate</button>
   <div id="toggles">
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
+    <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
     <label><input type="checkbox" id="smoothCheck" /> Smoothing</label>
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
     <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
@@ -141,14 +142,19 @@
   const enableBtn = document.getElementById("enable");
   const smoothCheck = document.getElementById("smoothCheck");
   const predictCheck = document.getElementById("predictCheck");
+  const accelCheck = document.getElementById("accelCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
   // Prediction: when off, reproduce the pre-update behavior (ease toward the
   // raw reading with no extrapolation) for an A/B comparison.
+  // Accel guard: when on, damp the prediction while linear acceleration is
+  // high (e.g. shoving the phone) so jitter isn't amplified into flicker.
   let smoothing = false;
   let prediction = true;
+  let accelGuard = true;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   predictCheck.addEventListener("change", () => { prediction = predictCheck.checked; });
+  accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
 
   // Density slider: higher = denser. Rebuilds the dot grid on change.
   const densitySlider = document.getElementById("densitySlider");
@@ -181,6 +187,12 @@
   const CUR_SMOOTH = 0.5;        // light de-jitter easing toward the prediction
   const OLD_SMOOTH = 0.15;       // pre-update easing (used when prediction off)
   const STALE_MS = 120;          // drop velocity if readings stop coming
+
+  // Accel guard: damp the prediction as linear acceleration (DeviceMotion)
+  // rises, so a fast translation can't amplify sensor jitter into flicker.
+  const ACC_LOW = 3;             // below this (m/s^2) prediction is untouched
+  const ACC_HIGH = 4;            // above this the prediction is fully damped
+  const ACC_SMOOTH = 0.4;        // EMA factor for the accel magnitude
 
   // --- Dot grid ---------------------------------------------------------
   // Each dot also carries `target`: a random unit vector representing an
@@ -239,6 +251,7 @@
   let prevAngSpeed = 0;          // previous frame's speed, for acceleration
   let angAxis = [0, 0, 1];       // axis the vector is rotating about
   let lastFrameTime = 0;
+  let accelMag = 0;              // smoothed linear-acceleration magnitude (m/s^2)
 
   // Convert (alpha, beta, gamma) Euler angles (degrees, ZXY order per the
   // W3C DeviceOrientation spec) into a quaternion, then rotate [0,0,1].
@@ -310,6 +323,15 @@
     ingestVector(orientationToVector(e.alpha, e.beta, e.gamma));
   }
 
+  // Track the magnitude of linear acceleration (gravity excluded). Used by the
+  // Accel guard to damp the prediction while the phone is being moved fast.
+  function onMotion(e) {
+    const lin = e.acceleration;
+    if (!lin) return; // device either reports `acceleration` or it doesn't
+    const m = Math.hypot(lin.x || 0, lin.y || 0, lin.z || 0);
+    accelMag += (m - accelMag) * ACC_SMOOTH;
+  }
+
   // --- Render loop ------------------------------------------------------
   function frame(ts) {
     const now = ts || performance.now();
@@ -328,6 +350,14 @@
     let predAngle = angSpeed * lead + 0.5 * accel * lead * lead * ACCEL_GAIN;
     if (predAngle > MAX_LEAD_ANGLE) predAngle = MAX_LEAD_ANGLE;
     else if (predAngle < -MAX_LEAD_ANGLE) predAngle = -MAX_LEAD_ANGLE;
+
+    // Accel guard: as linear acceleration rises from ACC_LOW to ACC_HIGH, ramp
+    // the prediction down to zero so a fast shove can't amplify jitter.
+    if (accelGuard) {
+      let damp = 1 - (accelMag - ACC_LOW) / (ACC_HIGH - ACC_LOW);
+      if (damp < 0) damp = 0; else if (damp > 1) damp = 1;
+      predAngle *= damp;
+    }
 
     // Target the prediction when on; otherwise the raw reading (pre-update).
     const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
@@ -387,12 +417,21 @@
 
   function startListening() {
     window.addEventListener("deviceorientation", onOrientation, { passive: true });
+    window.addEventListener("devicemotion", onMotion, { passive: true });
   }
 
   function requestAndStart() {
-    DeviceOrientationEvent.requestPermission()
-      .then((state) => {
-        if (state === "granted") {
+    // DeviceMotion is gated separately from DeviceOrientation on iOS; request
+    // both from this single tap. Orientation drives the effect, so it decides
+    // whether activation succeeded; motion only feeds the Accel guard.
+    const motionReq = (typeof DeviceMotionEvent !== "undefined" &&
+        typeof DeviceMotionEvent.requestPermission === "function")
+      ? DeviceMotionEvent.requestPermission().catch(() => "denied")
+      : Promise.resolve("granted");
+
+    Promise.all([DeviceOrientationEvent.requestPermission(), motionReq])
+      .then(([orientState]) => {
+        if (orientState === "granted") {
           startListening();
           enableBtn.classList.add("hidden");
         } else {
