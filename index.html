@@ -16,7 +16,8 @@
   }
   canvas { display: block; width: 100vw; height: 100vh; }
 
-  /* Activation button (shown when the browser gates orientation sensors) */
+  /* Activation button — hidden by default; only shown if permission is denied
+     or a user gesture is required (see the permission flow in the script). */
   #enable {
     position: fixed;
     top: calc(env(safe-area-inset-top, 0px) + 16px);
@@ -30,10 +31,11 @@
     color: #fff; font-size: 14px; font-weight: 600; letter-spacing: 0.2px;
     cursor: pointer;
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    opacity: 0; pointer-events: none; /* hidden by default */
     transition: opacity .25s ease, transform .15s ease;
   }
   #enable:active { transform: scale(0.96); }
-  #enable.hidden { opacity: 0; pointer-events: none; }
+  #enable.show { opacity: 1; pointer-events: auto; }
 
   /* Toggle group */
   #toggles {
@@ -160,7 +162,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <button id="enable" class="hidden">Tap to activate</button>
+  <button id="enable">Tap to activate</button>
   <div id="toggles">
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
     <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
@@ -733,20 +735,24 @@
     window.addEventListener("devicemotion", onMotion, { passive: true });
   }
 
-  function requestAndStart() {
-    // DeviceMotion is gated separately from DeviceOrientation on iOS; request
-    // both from this single tap. Orientation drives the effect, so it decides
-    // whether activation succeeded; motion only feeds the Accel guard.
+  // Request both permissions together (DeviceMotion is gated separately from
+  // DeviceOrientation on iOS). Orientation drives the effect, so it decides
+  // whether activation succeeded; motion only feeds the Accel/Jerk guards.
+  function requestPerms() {
     const motionReq = (typeof DeviceMotionEvent !== "undefined" &&
         typeof DeviceMotionEvent.requestPermission === "function")
       ? DeviceMotionEvent.requestPermission().catch(() => "denied")
       : Promise.resolve("granted");
+    return Promise.all([DeviceOrientationEvent.requestPermission(), motionReq]);
+  }
 
-    Promise.all([DeviceOrientationEvent.requestPermission(), motionReq])
+  // Triggered by tapping the button (a real user gesture) when one is required.
+  function requestAndStart() {
+    requestPerms()
       .then(([orientState]) => {
         if (orientState === "granted") {
           startListening();
-          enableBtn.classList.add("hidden");
+          enableBtn.classList.remove("show");
         } else {
           enableBtn.textContent = "Motion blocked — retry";
         }
@@ -755,8 +761,16 @@
   }
 
   if (needsPermission) {
-    enableBtn.classList.remove("hidden");
     enableBtn.addEventListener("click", requestAndStart);
+    // Probe without a gesture: browsers that auto-approve (e.g. Chrome on
+    // Android) resolve "granted" and the button stays hidden; iOS rejects
+    // because it needs a user activation, so we reveal the button to retry.
+    requestPerms()
+      .then(([orientState]) => {
+        if (orientState === "granted") startListening();
+        else enableBtn.classList.add("show");
+      })
+      .catch(() => enableBtn.classList.add("show"));
   } else if (typeof DeviceOrientationEvent !== "undefined") {
     // Browsers that don't gate the sensor: just listen.
     startListening();
