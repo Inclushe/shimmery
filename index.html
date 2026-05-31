@@ -151,7 +151,7 @@
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
     <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
     <label><input type="checkbox" id="jerkCheck" checked /> Jerk guard</label>
-    <label><input type="checkbox" id="smoothCheck" /> Smoothing</label>
+    <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
     <label><input type="checkbox" id="debugCheck" /> Debug</label>
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
     <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
@@ -191,7 +191,7 @@
   // Accel guard: when on, damp the prediction while linear acceleration is
   // high (e.g. shoving the phone) so jitter isn't amplified into flicker.
   // Jerk guard: same idea, but keyed off jerk (rate of change of acceleration).
-  let smoothing = false;
+  let smoothing = true;
   let prediction = true;
   let accelGuard = true;
   let jerkGuard = true;
