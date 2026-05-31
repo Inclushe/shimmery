@@ -321,7 +321,7 @@
   let lastFrameTime = 0;
   let accelMag = 0;              // smoothed linear-acceleration magnitude (m/s^2)
   let jerkMag = 0;               // smoothed jerk = d(accelMag)/dt (m/s^3); reference only
-  let absJerk = 0;               // |raw jerk| (rectified, UNsmoothed); drives the Jerk guard
+  let absJerk = 0;               // EMA of |raw jerk| (rectify-then-smooth envelope); drives the Jerk guard
   let snapMag = 0;               // smoothed snap = d(jerkMag)/dt (m/s^4); debug-only for now
   let prevAccelMag = 0;          // previous accel magnitude, for the jerk finite-difference
   let prevJerkMag = 0;           // previous jerk, for the snap finite-difference
@@ -408,15 +408,16 @@
     accelMag += (m - accelMag) * ACC_SMOOTH;
 
     // Jerk: rate of change of the (smoothed) acceleration magnitude. We keep a
-    // smoothed signed jerk for reference, plus `absJerk` — the rectified raw
-    // jerk that drives the guard (rectify-then-smooth, but UNsmoothed for now).
+    // smoothed signed jerk for reference, plus `absJerk` — the rectify-then-
+    // smooth envelope (EMA of |raw jerk|) that drives the guard; staying
+    // non-negative, it doesn't dip through zero when jerk changes sign.
     // Snap: rate of change of jerk, EMA-smoothed; debug-only for now.
     if (prevMotionTime) {
       const dt = (now - prevMotionTime) / 1000;
       if (dt > 0) {
         const rawJerk = (accelMag - prevAccelMag) / dt;
         jerkMag += (rawJerk - jerkMag) * ACC_SMOOTH;
-        absJerk = Math.abs(rawJerk);
+        absJerk += (Math.abs(rawJerk) - absJerk) * ACC_SMOOTH;
         snapMag += ((jerkMag - prevJerkMag) / dt - snapMag) * ACC_SMOOTH;
       }
     }
