@@ -287,7 +287,7 @@
   // AbsJerk guard: ramp keyed off the rectify-then-smooth envelope, which reads
   // higher and has a nonzero noise floor, so it gets its own (higher) band.
   const ABSJERK_LOW = 15;        // below this (m/s^3) prediction is untouched
-  const ABSJERK_HIGH = 20;       // above this the prediction is fully damped
+  const ABSJERK_HIGH = 30;       // above this the prediction is fully damped
 
   // Attack/release: damping snaps closed instantly but reopens over this many
   // ms, bridging brief dips in the guard signal (e.g. jerk crossing zero).
