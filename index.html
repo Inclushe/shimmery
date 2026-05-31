@@ -171,7 +171,7 @@
     <div class="thresh"><span>low</span><input type="number" id="sjerkLowInput" step="1" /><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
     <label><input type="checkbox" id="ajerkCheck" checked /> Absolute jerk guard</label>
     <div class="thresh"><span>low</span><input type="number" id="ajerkLowInput" step="1" /><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
-    <label><input type="checkbox" id="attackCheck" /> Attack/release</label>
+    <label><input type="checkbox" id="attackCheck" checked /> Attack/release</label>
     <div class="thresh"><span>release ms</span><input type="number" id="releaseInput" step="50" /></div>
     <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
     <div class="thresh"><span>factor</span><input type="number" id="smoothInput" step="0.05" min="0" max="1" /></div>
@@ -226,7 +226,7 @@
   let accelGuard = true;
   let signedJerkGuard = false;
   let absJerkGuard = true;
-  let attackRelease = false;
+  let attackRelease = true;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   predictCheck.addEventListener("change", () => { prediction = predictCheck.checked; });
   accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
