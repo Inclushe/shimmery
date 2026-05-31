@@ -172,6 +172,7 @@
     <label><input type="checkbox" id="attackCheck" /> Attack/release</label>
     <div class="thresh"><span>release ms</span><input type="number" id="releaseInput" step="50" /></div>
     <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
+    <div class="thresh"><span>factor</span><input type="number" id="smoothInput" step="0.05" min="0" max="1" /></div>
     <label><input type="checkbox" id="debugCheck" /> Debug</label>
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
     <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
@@ -300,6 +301,7 @@
   let sjerkLowV = JERK_LOW, sjerkHighV = JERK_HIGH;
   let ajerkLowV = ABSJERK_LOW, ajerkHighV = ABSJERK_HIGH;
   let guardReleaseV = GUARD_RELEASE_MS;
+  let curSmoothV = CUR_SMOOTH;
 
   // Bind a number input to a setter, seeded with the constant default.
   function bindThreshold(id, initial, set) {
@@ -317,6 +319,7 @@
   bindThreshold("ajerkLowInput", ABSJERK_LOW, (v) => { ajerkLowV = v; });
   bindThreshold("ajerkHighInput", ABSJERK_HIGH, (v) => { ajerkHighV = v; });
   bindThreshold("releaseInput", GUARD_RELEASE_MS, (v) => { guardReleaseV = v; });
+  bindThreshold("smoothInput", CUR_SMOOTH, (v) => { curSmoothV = v; });
 
   // --- Dot grid ---------------------------------------------------------
   // Each dot also carries `target`: a random unit vector representing an
@@ -663,7 +666,7 @@
 
     // Ease toward the target; snap if smoothing is off. With prediction off we
     // use the original 0.15 easing so the comparison is faithful.
-    let kSmooth = prediction ? CUR_SMOOTH : OLD_SMOOTH;
+    let kSmooth = prediction ? (debugOn ? curSmoothV : CUR_SMOOTH) : OLD_SMOOTH;
     if (!smoothing) kSmooth = 1;
     cur[0] += (target[0] - cur[0]) * kSmooth;
     cur[1] += (target[1] - cur[1]) * kSmooth;
