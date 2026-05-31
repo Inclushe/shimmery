@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#05060a" />
+<meta name="theme-color" content="#000000" />
 <title>Dots</title>
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #05060a; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000000; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
@@ -54,7 +54,23 @@
     cursor: pointer;
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   }
-  #toggles input { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; }
+  #toggles input[type="checkbox"] { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; }
+  #densityRow, #sizeRow { gap: 10px; }
+  #densityRow input[type="range"], #sizeRow input[type="range"] { width: 110px; accent-color: #fff; cursor: pointer; }
+
+  /* Per-guard threshold editors, revealed only in debug mode */
+  .thresh { display: none; gap: 8px; margin: -2px 0 2px 14px; align-items: center; }
+  body.debug .thresh { display: flex; }
+  .thresh span {
+    color: rgba(255,255,255,0.7); font-size: 12px; font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .thresh input[type="number"] {
+    width: 52px; padding: 4px 6px;
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 8px;
+    background: rgba(20,22,30,0.6); color: #fff;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
 
   /* Info button (bottom-right) */
   #infoBtn {
@@ -104,6 +120,42 @@
     font-size: 26px; line-height: 1; cursor: pointer; padding: 4px;
   }
   #infoClose:active { color: #fff; }
+
+  /* Debug overlay (top-left), toggled by the Debug checkbox */
+  #debug {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 16px);
+    left: calc(env(safe-area-inset-left, 0px) + 16px);
+    z-index: 15;
+    width: 232px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    background: rgba(10,12,18,0.72);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #d8dde8;
+    pointer-events: none; /* never intercept taps meant for the canvas */
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  #debug.hidden { display: none; }
+  #debug h3 {
+    font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+    color: rgba(255,255,255,.5); margin-bottom: 6px;
+  }
+  .dbg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  .dbg-label { width: 58px; color: rgba(255,255,255,.65); white-space: nowrap; }
+  .dbg-track {
+    position: relative; flex: 1; height: 10px; border-radius: 2px;
+    background: rgba(255,255,255,.08); overflow: hidden;
+  }
+  .dbg-fill { position: absolute; top: 0; bottom: 0; background: #5b9bff; border-radius: 2px; }
+  .dbg-track.bip::before { /* center line for bipolar (-/+) metrics */
+    content: ""; position: absolute; left: 50%; top: 0; bottom: 0;
+    width: 1px; background: rgba(255,255,255,.25);
+  }
+  .dbg-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,90,90,.7); }
+  .dbg-val { width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -111,8 +163,22 @@
   <button id="enable" class="hidden">Tap to activate</button>
   <div id="toggles">
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
-    <label><input type="checkbox" id="smoothCheck" /> Smoothing</label>
+    <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
+    <div class="thresh"><span>low</span><input type="number" id="accLowInput" step="0.5" /><span>high</span><input type="number" id="accHighInput" step="0.5" /></div>
+    <label><input type="checkbox" id="sjerkCheck" /> Jerk guard</label>
+    <div class="thresh"><span>low</span><input type="number" id="sjerkLowInput" step="1" /><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
+    <label><input type="checkbox" id="ajerkCheck" checked /> Absolute jerk guard</label>
+    <div class="thresh"><span>low</span><input type="number" id="ajerkLowInput" step="1" /><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
+    <label><input type="checkbox" id="attackCheck" /> Attack/release</label>
+    <div class="thresh"><span>release ms</span><input type="number" id="releaseInput" step="50" /></div>
+    <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
+    <div class="thresh"><span>factor</span><input type="number" id="smoothInput" step="0.05" min="0" max="1" /></div>
+    <label><input type="checkbox" id="debugCheck" /> Debug</label>
+    <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
+    <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
   </div>
+
+  <div id="debug" class="hidden" aria-hidden="true"></div>
 
   <button id="infoBtn" aria-label="About">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
@@ -137,14 +203,56 @@
   const enableBtn = document.getElementById("enable");
   const smoothCheck = document.getElementById("smoothCheck");
   const predictCheck = document.getElementById("predictCheck");
+  const accelCheck = document.getElementById("accelCheck");
+  const sjerkCheck = document.getElementById("sjerkCheck");
+  const ajerkCheck = document.getElementById("ajerkCheck");
+  const attackCheck = document.getElementById("attackCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
   // Prediction: when off, reproduce the pre-update behavior (ease toward the
   // raw reading with no extrapolation) for an A/B comparison.
-  let smoothing = false;
+  // Accel guard: when on, damp the prediction while linear acceleration is
+  // high (e.g. shoving the phone) so jitter isn't amplified into flicker.
+  // Signed jerk guard: keyed off |smoothed signed jerk| (the original signal,
+  // which dips through zero on a sign change). Off by default.
+  // AbsJerk guard: keyed off the rectify-then-smooth envelope (stays elevated
+  // across a sign change). On by default.
+  // Attack/release: hold the guard damping with a fast attack and slow release,
+  // so a brief dip (e.g. jerk crossing zero mid-shove) doesn't un-clamp.
+  let smoothing = true;
   let prediction = true;
+  let accelGuard = true;
+  let signedJerkGuard = false;
+  let absJerkGuard = true;
+  let attackRelease = false;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   predictCheck.addEventListener("change", () => { prediction = predictCheck.checked; });
+  accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
+  sjerkCheck.addEventListener("change", () => { signedJerkGuard = sjerkCheck.checked; });
+  ajerkCheck.addEventListener("change", () => { absJerkGuard = ajerkCheck.checked; });
+  attackCheck.addEventListener("change", () => { attackRelease = attackCheck.checked; });
+
+  // Debug overlay: when on, show a live readout of the internal signals that
+  // drive the effect (accel magnitude, damping, angular velocity, vectors).
+  const debugCheck = document.getElementById("debugCheck");
+  const debugPanel = document.getElementById("debug");
+  let debugOn = false;
+  debugCheck.addEventListener("change", () => {
+    debugOn = debugCheck.checked;
+    debugPanel.classList.toggle("hidden", !debugOn);
+    document.body.classList.toggle("debug", debugOn); // reveals the threshold editors
+  });
+
+  // Density slider: higher = denser. Rebuilds the dot grid on change.
+  const densitySlider = document.getElementById("densitySlider");
+  densitySlider.addEventListener("input", () => {
+    densityDivisor = +densitySlider.value;
+    buildGrid();
+  });
+
+  // Size slider: dot radius in px. No grid rebuild needed.
+  const sizeSlider = document.getElementById("sizeSlider");
+  sizeSlider.addEventListener("input", () => { dotRadius = +sizeSlider.value; });
 
   // Info modal open/close.
   const infoModal = document.getElementById("infoModal");
@@ -153,9 +261,9 @@
   infoModal.addEventListener("click", (e) => { if (e.target === infoModal) infoModal.classList.add("hidden"); });
 
   // --- Tunables ---------------------------------------------------------
-  const DOT_RADIUS = 1;          // 2px dots
+  let dotRadius = 1;             // dot radius in px; set by the size slider
   const SPOT = 0.85;             // angular radius (radians) of the "lit" zone
-  const BASE_GRAY = 60;          // brightness of a far-away dot (0-255)
+  const BASE_GRAY = 32;          // brightness of a far-away dot (0-255)
 
   // Orientation prediction (see frame()): we extrapolate the orientation
   // vector forward by LEAD_MS to mask the sensor's latency.
@@ -167,6 +275,52 @@
   const OLD_SMOOTH = 0.15;       // pre-update easing (used when prediction off)
   const STALE_MS = 120;          // drop velocity if readings stop coming
 
+  // Accel guard: damp the prediction as linear acceleration (DeviceMotion)
+  // rises, so a fast translation can't amplify sensor jitter into flicker.
+  const ACC_LOW = 3;             // below this (m/s^2) prediction is untouched
+  const ACC_HIGH = 4;            // above this the prediction is fully damped
+  const ACC_SMOOTH = 0.4;        // EMA factor for the accel magnitude
+
+  // Signed jerk guard: ramp keyed off |smoothed signed jerk|.
+  const JERK_LOW = 10;           // below this (m/s^3) prediction is untouched
+  const JERK_HIGH = 15;          // above this the prediction is fully damped
+
+  // AbsJerk guard: ramp keyed off the rectify-then-smooth envelope, which reads
+  // higher and has a nonzero noise floor, so it gets its own (higher) band.
+  const ABSJERK_LOW = 15;        // below this (m/s^3) prediction is untouched
+  const ABSJERK_HIGH = 30;       // above this the prediction is fully damped
+
+  // Attack/release: damping snaps closed instantly but reopens over this many
+  // ms, bridging brief dips in the guard signal (e.g. jerk crossing zero).
+  const GUARD_RELEASE_MS = 50;
+
+  // Live, debug-editable copies of each guard's LOW/HIGH band. Default to the
+  // constants above; the number inputs (visible only in debug mode) update
+  // these, and frame() uses them in place of the constants when debug is on.
+  let accLowV = ACC_LOW, accHighV = ACC_HIGH;
+  let sjerkLowV = JERK_LOW, sjerkHighV = JERK_HIGH;
+  let ajerkLowV = ABSJERK_LOW, ajerkHighV = ABSJERK_HIGH;
+  let guardReleaseV = GUARD_RELEASE_MS;
+  let curSmoothV = CUR_SMOOTH;
+
+  // Bind a number input to a setter, seeded with the constant default.
+  function bindThreshold(id, initial, set) {
+    const el = document.getElementById(id);
+    el.value = initial;
+    el.addEventListener("input", () => {
+      const v = parseFloat(el.value);
+      if (!Number.isNaN(v)) set(v);
+    });
+  }
+  bindThreshold("accLowInput", ACC_LOW, (v) => { accLowV = v; });
+  bindThreshold("accHighInput", ACC_HIGH, (v) => { accHighV = v; });
+  bindThreshold("sjerkLowInput", JERK_LOW, (v) => { sjerkLowV = v; });
+  bindThreshold("sjerkHighInput", JERK_HIGH, (v) => { sjerkHighV = v; });
+  bindThreshold("ajerkLowInput", ABSJERK_LOW, (v) => { ajerkLowV = v; });
+  bindThreshold("ajerkHighInput", ABSJERK_HIGH, (v) => { ajerkHighV = v; });
+  bindThreshold("releaseInput", GUARD_RELEASE_MS, (v) => { guardReleaseV = v; });
+  bindThreshold("smoothInput", CUR_SMOOTH, (v) => { curSmoothV = v; });
+
   // --- Dot grid ---------------------------------------------------------
   // Each dot also carries `target`: a random unit vector representing an
   // orientation it "responds" to. The closer the device's current
@@ -174,6 +328,7 @@
   let dots = [];
   let cols = 0, rows = 0, spacing = 0;
   let W = 0, H = 0, dpr = 1;
+  let densityDivisor = 34;       // higher = smaller spacing = denser; set by slider
 
   // Pick a point uniformly at random on the unit sphere.
   function randomUnitVector() {
@@ -194,7 +349,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Density scales with screen size; aim for a tight dotted texture.
-    spacing = Math.max(14, Math.min(W, H) / 34);
+    spacing = Math.max(6, Math.min(W, H) / densityDivisor);
     cols = Math.ceil(W / spacing) + 1;
     rows = Math.ceil(H / spacing) + 1;
 
@@ -223,6 +378,12 @@
   let prevAngSpeed = 0;          // previous frame's speed, for acceleration
   let angAxis = [0, 0, 1];       // axis the vector is rotating about
   let lastFrameTime = 0;
+  let accelMag = 0;              // smoothed linear-acceleration magnitude (m/s^2)
+  let jerkMag = 0;               // smoothed jerk = d(accelMag)/dt (m/s^3); reference only
+  let absJerk = 0;               // EMA of |raw jerk| (rectify-then-smooth envelope); drives the Jerk guard
+  let prevAccelMag = 0;          // previous accel magnitude, for the jerk finite-difference
+  let prevMotionTime = 0;        // timestamp of the last devicemotion sample (ms)
+  let guardDamp = 1;             // attack/release-held damping actually applied to the prediction
 
   // Convert (alpha, beta, gamma) Euler angles (degrees, ZXY order per the
   // W3C DeviceOrientation spec) into a quaternion, then rotate [0,0,1].
@@ -294,6 +455,148 @@
     ingestVector(orientationToVector(e.alpha, e.beta, e.gamma));
   }
 
+  // Track the magnitude of linear acceleration (gravity excluded). Used by the
+  // Accel guard to damp the prediction while the phone is being moved fast.
+  function onMotion(e) {
+    const lin = e.acceleration;
+    if (!lin) return; // device either reports `acceleration` or it doesn't
+    const now = performance.now();
+    const m = Math.hypot(lin.x || 0, lin.y || 0, lin.z || 0);
+    accelMag += (m - accelMag) * ACC_SMOOTH;
+
+    // Jerk: rate of change of the (smoothed) acceleration magnitude. We keep a
+    // smoothed signed jerk for reference, plus `absJerk` — the rectify-then-
+    // smooth envelope (EMA of |raw jerk|) that drives the guard; staying
+    // non-negative, it doesn't dip through zero when jerk changes sign.
+    if (prevMotionTime) {
+      const dt = (now - prevMotionTime) / 1000;
+      if (dt > 0) {
+        const rawJerk = (accelMag - prevAccelMag) / dt;
+        jerkMag += (rawJerk - jerkMag) * ACC_SMOOTH;
+        absJerk += (Math.abs(rawJerk) - absJerk) * ACC_SMOOTH;
+      }
+    }
+    prevAccelMag = accelMag;
+    prevMotionTime = now;
+  }
+
+  // --- Debug overlay ----------------------------------------------------
+  // Values computed inside frame() that the overlay needs to read back.
+  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, sJerkDamp: 1, aJerkDamp: 1, predAngle: 0, fps: 0 };
+
+  // Each metric: a live accessor, a bar range, and a formatter. `bip` draws a
+  // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
+  const debugMetrics = [
+    { label: "accel",   get: () => accelMag,      min: 0, max: 8, enabled: () => accelGuard,
+      ticks: [{ at: () => accLowV, color: "#ff9b3b", dashed: true }, { at: () => accHighV, color: "#ff5b5b" }],
+      color: (v) => v >= accHighV ? "#ff5b5b" : (v >= accLowV ? "#ff9b3b" : "#5b9bff"),
+      fmt: (v) => v.toFixed(2) },
+    { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true, enabled: () => signedJerkGuard,
+      ticks: [{ at: () => -sjerkHighV, color: "#ff5b5b" }, { at: () => -sjerkLowV, color: "#ff9b3b", dashed: true },
+              { at: () => sjerkLowV, color: "#ff9b3b", dashed: true }, { at: () => sjerkHighV, color: "#ff5b5b" }],
+      color: (v) => Math.abs(v) >= sjerkHighV ? "#ff5b5b" : (Math.abs(v) >= sjerkLowV ? "#ff9b3b" : "#5b9bff"),
+      fmt: (v) => v.toFixed(1) },
+    { label: "absJerk", get: () => absJerk,       min: 0, max: 50, enabled: () => absJerkGuard,
+      ticks: [{ at: () => ajerkLowV, color: "#ff9b3b", dashed: true }, { at: () => ajerkHighV, color: "#ff5b5b" }],
+      color: (v) => v >= ajerkHighV ? "#ff5b5b" : (v >= ajerkLowV ? "#ff9b3b" : "#5b9bff"),
+      fmt: (v) => v.toFixed(1) },
+    { label: "tgtDamp", get: () => dbg.targetDamp, min: 0, max: 1, fmt: (v) => v.toFixed(2) },
+    { label: "damp",    get: () => dbg.damp,      min: 0, max: 1, fmt: (v) => v.toFixed(2) },
+    { label: "angVel",  get: () => angSpeed,      min: 0, max: 6, fmt: (v) => v.toFixed(2) },
+    { label: "predAng", get: () => dbg.predAngle, min: -MAX_LEAD_ANGLE, max: MAX_LEAD_ANGLE, bip: true, fmt: (v) => v.toFixed(3) },
+    { label: "meas x",  get: () => measVec[0],    min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "meas y",  get: () => measVec[1],    min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "meas z",  get: () => measVec[2],    min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "pred x",  get: () => cur[0],        min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "pred y",  get: () => cur[1],        min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "pred z",  get: () => cur[2],        min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
+    { label: "fps",     get: () => dbg.fps,       min: 0, max: 120, fmt: (v) => v.toFixed(0) },
+  ];
+
+  // A tick's background: a solid line, or a dashed one for the orange LOW
+  // thresholds. The dash is a height-relative gradient — 3 equal dashes split
+  // by 2 gaps (each 1/5 of the bar height) — so it's always exactly 3 parts.
+  function tickBg(color, dashed) {
+    return dashed
+      ? "linear-gradient(to bottom, " + color + " 0 20%, transparent 20% 40%, " +
+        color + " 40% 60%, transparent 60% 80%, " + color + " 80% 100%)"
+      : color;
+  }
+
+  // Build the rows once and cache the fill/value elements for fast updates.
+  function buildDebug() {
+    const head = document.createElement("h3");
+    head.textContent = "Debug";
+    debugPanel.appendChild(head);
+    for (const m of debugMetrics) {
+      const row = document.createElement("div");
+      row.className = "dbg-row";
+
+      const label = document.createElement("span");
+      label.className = "dbg-label";
+      label.textContent = m.label;
+
+      const track = document.createElement("div");
+      track.className = "dbg-track" + (m.bip ? " bip" : "");
+      const fill = document.createElement("div");
+      fill.className = "dbg-fill";
+      track.appendChild(fill);
+      if (m.ticks) {
+        m._tickEls = [];
+        for (const t of m.ticks) {
+          const tick = document.createElement("div");
+          tick.className = "dbg-tick";
+          tick.style.background = tickBg(t.color, t.dashed);
+          track.appendChild(tick);
+          m._tickEls.push(tick); // position set live in updateDebug
+        }
+      }
+
+      const val = document.createElement("span");
+      val.className = "dbg-val";
+
+      row.appendChild(label);
+      row.appendChild(track);
+      row.appendChild(val);
+      debugPanel.appendChild(row);
+      m._fill = fill;
+      m._val = val;
+    }
+  }
+
+  // Map each metric to a bar width/position and refresh its number.
+  function updateDebug() {
+    for (const m of debugMetrics) {
+      const v = m.get();
+      let pct = (v - m.min) / (m.max - m.min);
+      if (pct < 0) pct = 0; else if (pct > 1) pct = 1;
+      const fill = m._fill;
+      if (m.bip) {
+        // Grow out from the 50% center line in either direction.
+        if (pct >= 0.5) { fill.style.left = "50%"; fill.style.width = ((pct - 0.5) * 100) + "%"; }
+        else { fill.style.left = (pct * 100) + "%"; fill.style.width = ((0.5 - pct) * 100) + "%"; }
+      } else {
+        fill.style.left = "0";
+        fill.style.width = (pct * 100) + "%";
+      }
+      // A guarded metric whose guard is off keeps the default fill and gray ticks.
+      const enabled = m.enabled ? m.enabled() : true;
+      fill.style.background = (m.color && enabled) ? m.color(v) : ((m.warn && m.warn()) ? "#ff5b5b" : "#5b9bff");
+      m._val.textContent = m.fmt(v);
+
+      // Reposition threshold ticks live (they track the debug-editable bands),
+      // graying them out when the metric's guard is disabled.
+      if (m._tickEls) {
+        for (let i = 0; i < m._tickEls.length; i++) {
+          const at = m.ticks[i].at();
+          m._tickEls[i].style.left = (100 * (at - m.min) / (m.max - m.min)) + "%";
+          const tickColor = enabled ? m.ticks[i].color : "rgba(255,255,255,0.25)";
+          m._tickEls[i].style.background = tickBg(tickColor, m.ticks[i].dashed);
+        }
+      }
+    }
+  }
+
   // --- Render loop ------------------------------------------------------
   function frame(ts) {
     const now = ts || performance.now();
@@ -313,12 +616,57 @@
     if (predAngle > MAX_LEAD_ANGLE) predAngle = MAX_LEAD_ANGLE;
     else if (predAngle < -MAX_LEAD_ANGLE) predAngle = -MAX_LEAD_ANGLE;
 
+    // Accel guard: as linear acceleration rises from ACC_LOW to ACC_HIGH, ramp
+    // the prediction down to zero so a fast shove can't amplify jitter.
+    // (In debug mode the band is taken from the live editors, else the constants.)
+    const accLow = debugOn ? accLowV : ACC_LOW;
+    const accHigh = debugOn ? accHighV : ACC_HIGH;
+    let accDamp = 1 - (accelMag - accLow) / (accHigh - accLow);
+    if (accDamp < 0) accDamp = 0; else if (accDamp > 1) accDamp = 1;
+
+    // Signed jerk guard: ramp keyed off |smoothed signed jerk| (dips on a sign change).
+    const sjerkLow = debugOn ? sjerkLowV : JERK_LOW;
+    const sjerkHigh = debugOn ? sjerkHighV : JERK_HIGH;
+    const absSignedJerk = jerkMag < 0 ? -jerkMag : jerkMag;
+    let sJerkDamp = 1 - (absSignedJerk - sjerkLow) / (sjerkHigh - sjerkLow);
+    if (sJerkDamp < 0) sJerkDamp = 0; else if (sJerkDamp > 1) sJerkDamp = 1;
+
+    // AbsJerk guard: ramp keyed off the rectify-then-smooth envelope.
+    const ajerkLow = debugOn ? ajerkLowV : ABSJERK_LOW;
+    const ajerkHigh = debugOn ? ajerkHighV : ABSJERK_HIGH;
+    let aJerkDamp = 1 - (absJerk - ajerkLow) / (ajerkHigh - ajerkLow);
+    if (aJerkDamp < 0) aJerkDamp = 0; else if (aJerkDamp > 1) aJerkDamp = 1;
+
+    // Instantaneous target = product of the enabled guards. (Ramps are always
+    // computed so the debug overlay can show them; applied only when on.)
+    let targetDamp = 1;
+    if (accelGuard) targetDamp *= accDamp;
+    if (signedJerkGuard) targetDamp *= sJerkDamp;
+    if (absJerkGuard) targetDamp *= aJerkDamp;
+
+    // Attack/release: snap closed instantly when more damping is called for,
+    // but reopen slowly (over the release time) so a brief signal dip doesn't
+    // un-clamp the prediction mid-disturbance. When off, apply target directly.
+    const releaseMs = debugOn ? guardReleaseV : GUARD_RELEASE_MS;
+    if (attackRelease) {
+      if (targetDamp <= guardDamp) {
+        guardDamp = targetDamp; // attack
+      } else {
+        const k = 1 - Math.exp(-(frameDt * 1000) / releaseMs); // release
+        guardDamp += (targetDamp - guardDamp) * k;
+      }
+    } else {
+      guardDamp = targetDamp; // keep state in sync so toggling is seamless
+    }
+    const damp = guardDamp;
+    predAngle *= damp;
+
     // Target the prediction when on; otherwise the raw reading (pre-update).
     const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
 
     // Ease toward the target; snap if smoothing is off. With prediction off we
     // use the original 0.15 easing so the comparison is faithful.
-    let kSmooth = prediction ? CUR_SMOOTH : OLD_SMOOTH;
+    let kSmooth = prediction ? (debugOn ? curSmoothV : CUR_SMOOTH) : OLD_SMOOTH;
     if (!smoothing) kSmooth = 1;
     cur[0] += (target[0] - cur[0]) * kSmooth;
     cur[1] += (target[1] - cur[1]) * kSmooth;
@@ -327,7 +675,7 @@
     const vx = cur[0] / len, vy = cur[1] / len, vz = cur[2] / len;
 
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = "#05060a";
+    ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, W, H);
 
     for (let k = 0; k < dots.length; k++) {
@@ -344,8 +692,19 @@
 
       ctx.fillStyle = "rgb(" + g + "," + g + "," + g + ")";
       ctx.beginPath();
-      ctx.arc(d.x, d.y, DOT_RADIUS, 0, Math.PI * 2);
+      ctx.arc(d.x, d.y, dotRadius, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    if (debugOn) {
+      dbg.damp = damp;
+      dbg.targetDamp = targetDamp;
+      dbg.accDamp = accDamp;
+      dbg.sJerkDamp = sJerkDamp;
+      dbg.aJerkDamp = aJerkDamp;
+      dbg.predAngle = predAngle;
+      if (frameDt > 0) dbg.fps += (1 / frameDt - dbg.fps) * 0.1;
+      updateDebug();
     }
 
     requestAnimationFrame(frame);
@@ -371,12 +730,21 @@
 
   function startListening() {
     window.addEventListener("deviceorientation", onOrientation, { passive: true });
+    window.addEventListener("devicemotion", onMotion, { passive: true });
   }
 
   function requestAndStart() {
-    DeviceOrientationEvent.requestPermission()
-      .then((state) => {
-        if (state === "granted") {
+    // DeviceMotion is gated separately from DeviceOrientation on iOS; request
+    // both from this single tap. Orientation drives the effect, so it decides
+    // whether activation succeeded; motion only feeds the Accel guard.
+    const motionReq = (typeof DeviceMotionEvent !== "undefined" &&
+        typeof DeviceMotionEvent.requestPermission === "function")
+      ? DeviceMotionEvent.requestPermission().catch(() => "denied")
+      : Promise.resolve("granted");
+
+    Promise.all([DeviceOrientationEvent.requestPermission(), motionReq])
+      .then(([orientState]) => {
+        if (orientState === "granted") {
           startListening();
           enableBtn.classList.add("hidden");
         } else {
@@ -400,6 +768,7 @@
   window.addEventListener("resize", buildGrid);
   window.addEventListener("orientationchange", () => setTimeout(buildGrid, 200));
 
+  buildDebug();
   buildGrid();
   requestAnimationFrame(frame);
 })();
