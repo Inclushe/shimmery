@@ -380,6 +380,7 @@
   let prevAngSpeed = 0;          // previous frame's speed, for acceleration
   let angAxis = [0, 0, 1];       // axis the vector is rotating about
   let lastFrameTime = 0;
+  let hasData = false;           // true once the first orientation reading lands
   let accelMag = 0;              // smoothed linear-acceleration magnitude (m/s^2)
   let jerkMag = 0;               // smoothed jerk = d(accelMag)/dt (m/s^3); reference only
   let absJerk = 0;               // EMA of |raw jerk| (rectify-then-smooth envelope); drives the Jerk guard
@@ -450,6 +451,7 @@
     prevMeas = newVec;
     prevMeasTime = now;
     measVec = newVec;
+    hasData = true;
   }
 
   function onOrientation(e) {
@@ -680,7 +682,9 @@
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, W, H);
 
-    for (let k = 0; k < dots.length; k++) {
+    // Keep the canvas blank until the first orientation reading arrives, so the
+    // dots don't flash at the default orientation on load.
+    for (let k = 0; hasData && k < dots.length; k++) {
       const d = dots[k];
       const t = d.target;
       // Angular distance between current orientation and this dot's target.
