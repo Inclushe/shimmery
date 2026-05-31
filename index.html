@@ -486,16 +486,16 @@
   // Each metric: a live accessor, a bar range, and a formatter. `bip` draws a
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
   const debugMetrics = [
-    { label: "accel",   get: () => accelMag,      min: 0, max: 8,
+    { label: "accel",   get: () => accelMag,      min: 0, max: 8, enabled: () => accelGuard,
       ticks: [{ at: () => accLowV, color: "#ff9b3b" }, { at: () => accHighV, color: "#ff5b5b" }],
       color: (v) => v >= accHighV ? "#ff5b5b" : (v >= accLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(2) },
-    { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true,
+    { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true, enabled: () => signedJerkGuard,
       ticks: [{ at: () => -sjerkHighV, color: "#ff5b5b" }, { at: () => -sjerkLowV, color: "#ff9b3b" },
               { at: () => sjerkLowV, color: "#ff9b3b" }, { at: () => sjerkHighV, color: "#ff5b5b" }],
       color: (v) => Math.abs(v) >= sjerkHighV ? "#ff5b5b" : (Math.abs(v) >= sjerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
-    { label: "absJerk", get: () => absJerk,       min: 0, max: 50,
+    { label: "absJerk", get: () => absJerk,       min: 0, max: 50, enabled: () => absJerkGuard,
       ticks: [{ at: () => ajerkLowV, color: "#ff9b3b" }, { at: () => ajerkHighV, color: "#ff5b5b" }],
       color: (v) => v >= ajerkHighV ? "#ff5b5b" : (v >= ajerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
@@ -569,14 +569,18 @@
         fill.style.left = "0";
         fill.style.width = (pct * 100) + "%";
       }
-      fill.style.background = m.color ? m.color(v) : ((m.warn && m.warn()) ? "#ff5b5b" : "#5b9bff");
+      // A guarded metric whose guard is off keeps the default fill and gray ticks.
+      const enabled = m.enabled ? m.enabled() : true;
+      fill.style.background = (m.color && enabled) ? m.color(v) : ((m.warn && m.warn()) ? "#ff5b5b" : "#5b9bff");
       m._val.textContent = m.fmt(v);
 
-      // Reposition threshold ticks live (they track the debug-editable bands).
+      // Reposition threshold ticks live (they track the debug-editable bands),
+      // graying them out when the metric's guard is disabled.
       if (m._tickEls) {
         for (let i = 0; i < m._tickEls.length; i++) {
           const at = m.ticks[i].at();
           m._tickEls[i].style.left = (100 * (at - m.min) / (m.max - m.min)) + "%";
+          m._tickEls[i].style.background = enabled ? m.ticks[i].color : "rgba(255,255,255,0.25)";
         }
       }
     }
