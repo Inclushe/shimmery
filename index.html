@@ -339,6 +339,7 @@
   const ACCEL_GAIN = 1.0;        // how strongly acceleration extends the lead
   const MAX_LEAD_ANGLE = 0.6;    // clamp on predicted rotation (radians)
   const VEL_SMOOTH = 0.35;       // angular-velocity smoothing (0-1)
+  const ANG_ACCEL_SMOOTH = 0.35; // angular-acceleration smoothing (0-1); lower = steadier
   const CUR_SMOOTH = 0.5;        // light de-jitter easing toward the prediction
   const OLD_SMOOTH = 0.15;       // pre-update easing (used when prediction off)
   const STALE_MS = 120;          // drop velocity if readings stop coming
@@ -443,7 +444,7 @@
   let prevMeas = null;           // previous measured vector
   let prevMeasTime = 0;          // timestamp of that measurement (ms)
   let angSpeed = 0;              // smoothed angular speed (rad/s)
-  let prevAngSpeed = 0;          // previous frame's speed, for acceleration
+  let angAccel = 0;              // smoothed angular acceleration (rad/s^2), event-driven
   let angAxis = [0, 0, 1];       // axis the vector is rotating about
   let lastFrameTime = 0;
   let hasData = false;           // true once the first orientation reading lands
@@ -510,7 +511,12 @@
         let az = prevMeas[0] * newVec[1] - prevMeas[1] * newVec[0];
         const al = Math.hypot(ax, ay, az);
         const instSpeed = angle / dt;
+        // Estimate angular acceleration here (event-driven, using the real
+        // inter-sample dt) rather than per render frame — differentiating the
+        // staircase `angSpeed` at the frame rate is what made predAng flicker.
+        const prevSpeed = angSpeed;
         angSpeed += (instSpeed - angSpeed) * VEL_SMOOTH;
+        angAccel += ((angSpeed - prevSpeed) / dt - angAccel) * ANG_ACCEL_SMOOTH;
         if (al > 1e-6) angAxis = [ax / al, ay / al, az / al];
       }
     }
@@ -677,15 +683,15 @@
     lastFrameTime = now;
 
     // If readings have stopped arriving (device held still), relax the
-    // velocity so the prediction doesn't keep drifting.
-    if (now - prevMeasTime > STALE_MS) angSpeed = 0;
+    // velocity/acceleration so the prediction doesn't keep drifting.
+    if (now - prevMeasTime > STALE_MS) { angSpeed = 0; angAccel = 0; }
 
     // Predict the orientation LEAD_MS ahead: velocity term + an acceleration
     // term that pushes further when speeding up and pulls back when slowing.
-    const accel = frameDt > 0 ? (angSpeed - prevAngSpeed) / frameDt : 0;
-    prevAngSpeed = angSpeed;
+    // Both terms come from event-driven, smoothed values, so they're stable
+    // between sensor samples (no per-frame flicker).
     const lead = LEAD_MS / 1000;
-    let predAngle = angSpeed * lead + 0.5 * accel * lead * lead * ACCEL_GAIN;
+    let predAngle = angSpeed * lead + 0.5 * angAccel * lead * lead * ACCEL_GAIN;
     if (predAngle > MAX_LEAD_ANGLE) predAngle = MAX_LEAD_ANGLE;
     else if (predAngle < -MAX_LEAD_ANGLE) predAngle = -MAX_LEAD_ANGLE;
 
