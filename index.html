@@ -150,7 +150,8 @@
   <div id="toggles">
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
     <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
-    <label><input type="checkbox" id="jerkCheck" checked /> Jerk guard</label>
+    <label><input type="checkbox" id="sjerkCheck" /> Signed jerk guard</label>
+    <label><input type="checkbox" id="ajerkCheck" checked /> AbsJerk guard</label>
     <label><input type="checkbox" id="attackCheck" checked /> Attack/release</label>
     <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
     <label><input type="checkbox" id="debugCheck" /> Debug</label>
@@ -184,7 +185,8 @@
   const smoothCheck = document.getElementById("smoothCheck");
   const predictCheck = document.getElementById("predictCheck");
   const accelCheck = document.getElementById("accelCheck");
-  const jerkCheck = document.getElementById("jerkCheck");
+  const sjerkCheck = document.getElementById("sjerkCheck");
+  const ajerkCheck = document.getElementById("ajerkCheck");
   const attackCheck = document.getElementById("attackCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
@@ -192,18 +194,23 @@
   // raw reading with no extrapolation) for an A/B comparison.
   // Accel guard: when on, damp the prediction while linear acceleration is
   // high (e.g. shoving the phone) so jitter isn't amplified into flicker.
-  // Jerk guard: same idea, but keyed off jerk (rate of change of acceleration).
+  // Signed jerk guard: keyed off |smoothed signed jerk| (the original signal,
+  // which dips through zero on a sign change). Off by default.
+  // AbsJerk guard: keyed off the rectify-then-smooth envelope (stays elevated
+  // across a sign change). On by default.
   // Attack/release: hold the guard damping with a fast attack and slow release,
   // so a brief dip (e.g. jerk crossing zero mid-shove) doesn't un-clamp.
   let smoothing = true;
   let prediction = true;
   let accelGuard = true;
-  let jerkGuard = true;
+  let signedJerkGuard = false;
+  let absJerkGuard = true;
   let attackRelease = true;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   predictCheck.addEventListener("change", () => { prediction = predictCheck.checked; });
   accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
-  jerkCheck.addEventListener("change", () => { jerkGuard = jerkCheck.checked; });
+  sjerkCheck.addEventListener("change", () => { signedJerkGuard = sjerkCheck.checked; });
+  ajerkCheck.addEventListener("change", () => { absJerkGuard = ajerkCheck.checked; });
   attackCheck.addEventListener("change", () => { attackRelease = attackCheck.checked; });
 
   // Debug overlay: when on, show a live readout of the internal signals that
@@ -428,7 +435,7 @@
 
   // --- Debug overlay ----------------------------------------------------
   // Values computed inside frame() that the overlay needs to read back.
-  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, jerkDamp: 1, predAngle: 0, fps: 0 };
+  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, sJerkDamp: 1, aJerkDamp: 1, predAngle: 0, fps: 0 };
 
   // Each metric: a live accessor, a bar range, and a formatter. `bip` draws a
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
@@ -544,15 +551,22 @@
     let accDamp = 1 - (accelMag - ACC_LOW) / (ACC_HIGH - ACC_LOW);
     if (accDamp < 0) accDamp = 0; else if (accDamp > 1) accDamp = 1;
 
-    // Jerk guard: same ramp keyed off |jerk| (the rectified raw jerk).
-    let jerkDamp = 1 - (absJerk - JERK_LOW) / (JERK_HIGH - JERK_LOW);
-    if (jerkDamp < 0) jerkDamp = 0; else if (jerkDamp > 1) jerkDamp = 1;
+    // Signed jerk guard: ramp keyed off |smoothed signed jerk| (dips on a
+    // sign change). Uses the same JERK_LOW/HIGH band for now.
+    const absSignedJerk = jerkMag < 0 ? -jerkMag : jerkMag;
+    let sJerkDamp = 1 - (absSignedJerk - JERK_LOW) / (JERK_HIGH - JERK_LOW);
+    if (sJerkDamp < 0) sJerkDamp = 0; else if (sJerkDamp > 1) sJerkDamp = 1;
+
+    // AbsJerk guard: ramp keyed off the rectify-then-smooth envelope.
+    let aJerkDamp = 1 - (absJerk - JERK_LOW) / (JERK_HIGH - JERK_LOW);
+    if (aJerkDamp < 0) aJerkDamp = 0; else if (aJerkDamp > 1) aJerkDamp = 1;
 
     // Instantaneous target = product of the enabled guards. (Ramps are always
     // computed so the debug overlay can show them; applied only when on.)
     let targetDamp = 1;
     if (accelGuard) targetDamp *= accDamp;
-    if (jerkGuard) targetDamp *= jerkDamp;
+    if (signedJerkGuard) targetDamp *= sJerkDamp;
+    if (absJerkGuard) targetDamp *= aJerkDamp;
 
     // Attack/release: snap closed instantly when more damping is called for,
     // but reopen slowly (over GUARD_RELEASE_MS) so a brief signal dip doesn't
@@ -609,7 +623,8 @@
       dbg.damp = damp;
       dbg.targetDamp = targetDamp;
       dbg.accDamp = accDamp;
-      dbg.jerkDamp = jerkDamp;
+      dbg.sJerkDamp = sJerkDamp;
+      dbg.aJerkDamp = aJerkDamp;
       dbg.predAngle = predAngle;
       if (frameDt > 0) dbg.fps += (1 / frameDt - dbg.fps) * 0.1;
       updateDebug();
