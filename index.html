@@ -152,7 +152,7 @@
     <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
     <label><input type="checkbox" id="sjerkCheck" /> Signed jerk guard</label>
     <label><input type="checkbox" id="ajerkCheck" checked /> AbsJerk guard</label>
-    <label><input type="checkbox" id="attackCheck" checked /> Attack/release</label>
+    <label><input type="checkbox" id="attackCheck" /> Attack/release</label>
     <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
     <label><input type="checkbox" id="debugCheck" /> Debug</label>
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
@@ -205,7 +205,7 @@
   let accelGuard = true;
   let signedJerkGuard = false;
   let absJerkGuard = true;
-  let attackRelease = true;
+  let attackRelease = false;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   predictCheck.addEventListener("change", () => { prediction = predictCheck.checked; });
   accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
@@ -261,9 +261,14 @@
   const ACC_HIGH = 4;            // above this the prediction is fully damped
   const ACC_SMOOTH = 0.4;        // EMA factor for the accel magnitude
 
-  // Jerk guard: same ramp keyed off |jerk| (rate of change of acceleration).
+  // Signed jerk guard: ramp keyed off |smoothed signed jerk|.
   const JERK_LOW = 10;           // below this (m/s^3) prediction is untouched
   const JERK_HIGH = 15;          // above this the prediction is fully damped
+
+  // AbsJerk guard: ramp keyed off the rectify-then-smooth envelope, which reads
+  // higher and has a nonzero noise floor, so it gets its own (higher) band.
+  const ABSJERK_LOW = 15;        // below this (m/s^3) prediction is untouched
+  const ABSJERK_HIGH = 20;       // above this the prediction is fully damped
 
   // Attack/release: damping snaps closed instantly but reopens over this many
   // ms, bridging brief dips in the guard signal (e.g. jerk crossing zero).
@@ -450,8 +455,8 @@
       color: (v) => Math.abs(v) >= JERK_HIGH ? "#ff5b5b" : (Math.abs(v) >= JERK_LOW ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     { label: "absJerk", get: () => absJerk,       min: 0, max: 50,
-      ticks: [{ at: JERK_LOW, color: "#ff9b3b" }, { at: JERK_HIGH, color: "#ff5b5b" }],
-      color: (v) => v >= JERK_HIGH ? "#ff5b5b" : (v >= JERK_LOW ? "#ff9b3b" : "#5b9bff"),
+      ticks: [{ at: ABSJERK_LOW, color: "#ff9b3b" }, { at: ABSJERK_HIGH, color: "#ff5b5b" }],
+      color: (v) => v >= ABSJERK_HIGH ? "#ff5b5b" : (v >= ABSJERK_LOW ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     { label: "snap",    get: () => snapMag,       min: -500, max: 500, bip: true, fmt: (v) => v.toFixed(0) },
     { label: "tgtDamp", get: () => dbg.targetDamp, min: 0, max: 1, fmt: (v) => v.toFixed(2) },
@@ -558,7 +563,7 @@
     if (sJerkDamp < 0) sJerkDamp = 0; else if (sJerkDamp > 1) sJerkDamp = 1;
 
     // AbsJerk guard: ramp keyed off the rectify-then-smooth envelope.
-    let aJerkDamp = 1 - (absJerk - JERK_LOW) / (JERK_HIGH - JERK_LOW);
+    let aJerkDamp = 1 - (absJerk - ABSJERK_LOW) / (ABSJERK_HIGH - ABSJERK_LOW);
     if (aJerkDamp < 0) aJerkDamp = 0; else if (aJerkDamp > 1) aJerkDamp = 1;
 
     // Instantaneous target = product of the enabled guards. (Ramps are always
