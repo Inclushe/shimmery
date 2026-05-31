@@ -411,7 +411,9 @@
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
   const debugMetrics = [
     { label: "accel",   get: () => accelMag,      min: 0, max: 8,
-      ticks: [ACC_LOW, ACC_HIGH], warn: () => accelGuard && dbg.accDamp < 1, fmt: (v) => v.toFixed(2) },
+      ticks: [{ at: ACC_LOW, color: "#ff9b3b" }, { at: ACC_HIGH, color: "#ff5b5b" }],
+      color: (v) => v >= ACC_HIGH ? "#ff5b5b" : (v >= ACC_LOW ? "#ff9b3b" : "#5b9bff"),
+      fmt: (v) => v.toFixed(2) },
     { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true,
       warn: () => jerkGuard && dbg.jerkDamp < 1, fmt: (v) => v.toFixed(1) },
     { label: "damp",    get: () => dbg.damp,      min: 0, max: 1, fmt: (v) => v.toFixed(2) },
@@ -448,7 +450,8 @@
         for (const t of m.ticks) {
           const tick = document.createElement("div");
           tick.className = "dbg-tick";
-          tick.style.left = (100 * (t - m.min) / (m.max - m.min)) + "%";
+          tick.style.left = (100 * (t.at - m.min) / (m.max - m.min)) + "%";
+          tick.style.background = t.color;
           track.appendChild(tick);
         }
       }
@@ -480,7 +483,7 @@
         fill.style.left = "0";
         fill.style.width = (pct * 100) + "%";
       }
-      fill.style.background = (m.warn && m.warn()) ? "#ff5b5b" : "#5b9bff";
+      fill.style.background = m.color ? m.color(v) : ((m.warn && m.warn()) ? "#ff5b5b" : "#5b9bff");
       m._val.textContent = m.fmt(v);
     }
   }
