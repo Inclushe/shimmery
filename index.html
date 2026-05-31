@@ -37,6 +37,21 @@
   #enable:active { transform: scale(0.96); }
   #enable.show { opacity: 1; pointer-events: auto; }
 
+  /* "Open on your phone" message for devices with no usable motion sensor */
+  #desktopMsg {
+    position: fixed; inset: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: center;
+    padding: 32px; text-align: center;
+    color: rgba(255,255,255,0.9);
+    font-size: 19px; font-weight: 600; line-height: 1.4;
+  }
+  #desktopMsg.hidden { display: none; }
+  #desktopMsg .dm-emoji { display: block; font-size: 44px; margin-bottom: 16px; }
+  #desktopMsg .dm-sub {
+    display: block; margin-top: 10px;
+    font-size: 14px; font-weight: 400; color: rgba(255,255,255,0.55);
+  }
+
   /* Toggle group */
   #toggles {
     position: fixed;
@@ -163,6 +178,13 @@
 <body>
   <canvas id="c"></canvas>
   <button id="enable">Tap to activate</button>
+  <div id="desktopMsg" class="hidden">
+    <div>
+      <span class="dm-emoji">📱</span>
+      Open this on your phone
+      <span class="dm-sub">This effect uses your device's motion &amp; orientation sensors.</span>
+    </div>
+  </div>
   <div id="toggles">
     <label><input type="checkbox" id="predictCheck" checked /> Prediction</label>
     <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
@@ -203,6 +225,7 @@
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d");
   const enableBtn = document.getElementById("enable");
+  const desktopMsg = document.getElementById("desktopMsg");
   const smoothCheck = document.getElementById("smoothCheck");
   const predictCheck = document.getElementById("predictCheck");
   const accelCheck = document.getElementById("accelCheck");
@@ -451,7 +474,10 @@
     prevMeas = newVec;
     prevMeasTime = now;
     measVec = newVec;
-    hasData = true;
+    if (!hasData) {
+      hasData = true;
+      desktopMsg.classList.add("hidden"); // real sensor data → not a desktop
+    }
   }
 
   function onOrientation(e) {
@@ -779,6 +805,17 @@
     // Browsers that don't gate the sensor: just listen.
     startListening();
   }
+
+  // Give the sensors a moment to deliver a first reading. If none arrives and
+  // no permission button is waiting to be tapped, this device has no usable
+  // motion/orientation sensor (desktop/laptop) — tell them to use a phone.
+  // (Chrome on Android takes the no-button path too, but its sensors DO fire,
+  // so hasData flips true and this never triggers.)
+  setTimeout(() => {
+    if (!hasData && !enableBtn.classList.contains("show")) {
+      desktopMsg.classList.remove("hidden");
+    }
+  }, 1500);
 
   // Pointer fallback so it's alive on desktop and before activation.
   // window.addEventListener("pointermove", onPointer, { passive: true });
