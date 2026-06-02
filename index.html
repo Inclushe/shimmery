@@ -124,17 +124,17 @@
     font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 
-  /* Preset buttons for the inertial-settle inputs, revealed only in debug mode */
-  .presets { display: none; gap: 6px; margin: 6px 0 0 14px; flex-wrap: wrap; }
-  body.debug .presets { display: flex; }
+  /* Preset buttons for the inertial-settle inputs (shown whether or not debug is on) */
+  .presets { display: flex; gap: 6px; margin: 6px 0 0 14px; flex-wrap: wrap; }
   .presets button {
     padding: 3px 12px;
     border: 1px solid rgba(255,255,255,0.25); border-radius: 999px;
     background: rgba(20,22,30,0.6); color: rgba(255,255,255,0.85);
     font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    cursor: pointer; transition: background .15s ease;
+    cursor: pointer; transition: background .15s ease, color .15s ease;
   }
   .presets button:active { background: rgba(255,255,255,0.18); }
+  .presets button.active { background: #fff; color: #14161e; border-color: #fff; }
 
   /* Info button (bottom-right) */
   #infoBtn {
@@ -587,7 +587,19 @@
     calm: { settleSpeedInput: 1.0, trackStiffInput: 1600, anchorStiffInput: 1, dampStiffInput: 80 },
     snap: { settleSpeedInput: 1.0, trackStiffInput: 2500, anchorStiffInput: 1, dampStiffInput: 70 },
   };
-  document.querySelectorAll(".presets button[data-preset]").forEach((btn) => {
+  const presetBtns = document.querySelectorAll(".presets button[data-preset]");
+  const settleInputIds = ["settleSpeedInput", "trackStiffInput", "anchorStiffInput", "dampStiffInput"];
+  // Highlight the button whose preset matches the current inputs (none if a value
+  // was hand-tuned away from every preset).
+  function refreshPresetHighlight() {
+    presetBtns.forEach((btn) => {
+      const p = settlePresets[btn.dataset.preset];
+      const match = p && settleInputIds.every(
+        (id) => parseFloat(document.getElementById(id).value) === p[id]);
+      btn.classList.toggle("active", !!match);
+    });
+  }
+  presetBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
       const p = settlePresets[btn.dataset.preset];
       if (!p) return;
@@ -596,8 +608,13 @@
         el.value = p[id];
         el.dispatchEvent(new Event("input")); // reuse bindThreshold's listener to update the *V var
       }
+      refreshPresetHighlight();
     });
   });
+  // Clear/re-light the highlight whenever a settle input is hand-edited.
+  settleInputIds.forEach((id) =>
+    document.getElementById(id).addEventListener("input", refreshPresetHighlight));
+  refreshPresetHighlight(); // light the preset that matches the seeded defaults
   bindThreshold("accSmoothInput", ACC_SMOOTH, (v) => { accSmoothV = v; });
   bindThreshold("sjerkSmoothInput", JERK_SMOOTH, (v) => { sjerkSmoothV = v; });
   bindThreshold("ajerkSmoothInput", ABSJERK_SMOOTH, (v) => { ajerkSmoothV = v; });
@@ -919,9 +936,7 @@
     // ahead. Self-correcting: derived live from the spring's own constants.
     let lead = LEAD_MS / 1000;
     if (leadComp && inertia) {
-      const tk = debugOn ? trackStiffV : TRACK_STIFF;
-      const dp = debugOn ? dampStiffV : DAMP_STIFF;
-      if (tk > 0) lead += dp / tk;
+      if (trackStiffV > 0) lead += dampStiffV / trackStiffV;
     }
     let predAngle = angSpeed * lead;
     if (predAngle > MAX_LEAD_ANGLE) predAngle = MAX_LEAD_ANGLE;
@@ -990,13 +1005,14 @@
     // Semi-implicit (symplectic) Euler: update velocity, then position.
     let driveDbg = 1;
     if (inertia && prediction) {
-      const sp = debugOn ? settleSpeedV : SETTLE_SPEED;
-      let drive = angSpeed / sp;                 // 1 while moving -> 0 at rest
+      // These read the live values directly (not gated on debug) so the preset
+      // buttons and sliders tune the feel whether or not Debug is open.
+      let drive = angSpeed / settleSpeedV;       // 1 while moving -> 0 at rest
       if (drive > 1) drive = 1; else if (drive < 0) drive = 0;
       driveDbg = drive;
-      const kTrack  = (debugOn ? trackStiffV  : TRACK_STIFF) * drive; // strong, gated off at rest
-      const kAnchor =  debugOn ? anchorStiffV : ANCHOR_STIFF;         // weak, always on
-      const c       =  debugOn ? dampStiffV   : DAMP_STIFF;
+      const kTrack  = trackStiffV * drive; // strong, gated off at rest
+      const kAnchor = anchorStiffV;        // weak, always on
+      const c       = dampStiffV;
       for (let i = 0; i < 3; i++) {
         const accel = kTrack * (target[i] - cur[i])
                     + kAnchor * (measVec[i] - cur[i])
