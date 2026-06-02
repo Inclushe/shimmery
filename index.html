@@ -271,9 +271,10 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="attackCheck" checked /> Attack/release</label>
+      <label><input type="checkbox" id="glideCheck" checked /> Damp glide</label>
       <div class="thresh">
-        <div class="field"><span>release ms</span><input type="number" id="releaseInput" step="50" /></div>
+        <div class="field"><span>attack ms</span><input type="number" id="glideAttackInput" step="50" /></div>
+        <div class="field"><span>release ms</span><input type="number" id="glideReleaseInput" step="50" /></div>
       </div>
     </div>
     <div class="opt">
@@ -292,7 +293,7 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
+      <label><input type="checkbox" id="smoothCheck" /> Smoothing</label>
       <div class="thresh">
         <div class="field"><span>factor</span><input type="number" id="smoothInput" step="0.05" min="0" max="1" /></div>
       </div>
@@ -350,7 +351,7 @@
   const accelCheck = document.getElementById("accelCheck");
   const sjerkCheck = document.getElementById("sjerkCheck");
   const ajerkCheck = document.getElementById("ajerkCheck");
-  const attackCheck = document.getElementById("attackCheck");
+  const glideCheck = document.getElementById("glideCheck");
   const decelCheck = document.getElementById("decelCheck");
   const eqCheck = document.getElementById("eqCheck");
 
@@ -364,21 +365,22 @@
   // which dips through zero on a sign change). Off by default.
   // AbsJerk guard: keyed off the rectify-then-smooth envelope (stays elevated
   // across a sign change). On by default.
-  // Attack/release: hold the guard damping with a fast attack and slow release,
-  // so a brief dip (e.g. jerk crossing zero mid-shove) doesn't un-clamp.
-  let smoothing = true;
+  // Damp glide: ease the combined guard damping toward its target in both
+  // directions (over separate attack/release times) instead of snapping, so a
+  // guard engaging abruptly doesn't slam `damp` and cause its own flicker.
+  let smoothing = false;
   let prediction = true;
   let accelGuard = true;
   let signedJerkGuard = false;
   let absJerkGuard = true;
-  let attackRelease = true;
+  let dampGlide = true;
   let decelGuard = true;   // idea 1: damp prediction during abrupt deceleration
   let slowEq = true;       // idea 2: ease slowly to rest while settling
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
   sjerkCheck.addEventListener("change", () => { signedJerkGuard = sjerkCheck.checked; });
   ajerkCheck.addEventListener("change", () => { absJerkGuard = ajerkCheck.checked; });
-  attackCheck.addEventListener("change", () => { attackRelease = attackCheck.checked; });
+  glideCheck.addEventListener("change", () => { dampGlide = glideCheck.checked; });
   decelCheck.addEventListener("change", () => { decelGuard = decelCheck.checked; });
   eqCheck.addEventListener("change", () => { slowEq = eqCheck.checked; });
 
@@ -393,7 +395,7 @@
     { box: accelCheck,  set: (v) => { accelGuard = v; } },
     { box: sjerkCheck,  set: (v) => { signedJerkGuard = v; } },
     { box: ajerkCheck,  set: (v) => { absJerkGuard = v; } },
-    { box: attackCheck, set: (v) => { attackRelease = v; } },
+    { box: glideCheck,  set: (v) => { dampGlide = v; } },
     { box: decelCheck,  set: (v) => { decelGuard = v; } },
     { box: eqCheck,     set: (v) => { slowEq = v; } },
     { box: smoothCheck, set: (v) => { smoothing = v; } },
@@ -480,9 +482,10 @@
   const ABSJERK_LOW = 15;        // below this (m/s^3) prediction is untouched
   const ABSJERK_HIGH = 30;       // above this the prediction is fully damped
 
-  // Attack/release: damping snaps closed instantly but reopens over this many
-  // ms, bridging brief dips in the guard signal (e.g. jerk crossing zero).
-  const GUARD_RELEASE_MS = 50;
+  // Damp glide: ease the combined guard damping toward its target with separate
+  // time constants for engaging (toward more damping / 0) and releasing (toward 1).
+  const GLIDE_ATTACK_MS = 120;   // glide toward more damping
+  const GLIDE_RELEASE_MS = 250;  // glide back toward no damping
 
   // Decel guard (idea 1): damp the prediction while angular speed is dropping
   // fast (end of an abrupt motion), so the lagging predAngle can't overshoot.
@@ -503,7 +506,7 @@
   let sjerkLowV = JERK_LOW, sjerkHighV = JERK_HIGH;
   let ajerkLowV = ABSJERK_LOW, ajerkHighV = ABSJERK_HIGH;
   let decelLowV = DECEL_LOW, decelHighV = DECEL_HIGH;
-  let guardReleaseV = GUARD_RELEASE_MS;
+  let glideAttackV = GLIDE_ATTACK_MS, glideReleaseV = GLIDE_RELEASE_MS;
   let curSmoothV = CUR_SMOOTH;
   let eqMsV = EQ_TIME_MS, eqSpeedV = EQ_SPEED;
   let accSmoothV = ACC_SMOOTH;   // EMA factor for accel/jerk/absJerk (debug-editable)
@@ -524,7 +527,8 @@
   bindThreshold("sjerkHighInput", JERK_HIGH, (v) => { sjerkHighV = v; });
   bindThreshold("ajerkLowInput", ABSJERK_LOW, (v) => { ajerkLowV = v; });
   bindThreshold("ajerkHighInput", ABSJERK_HIGH, (v) => { ajerkHighV = v; });
-  bindThreshold("releaseInput", GUARD_RELEASE_MS, (v) => { guardReleaseV = v; });
+  bindThreshold("glideAttackInput", GLIDE_ATTACK_MS, (v) => { glideAttackV = v; });
+  bindThreshold("glideReleaseInput", GLIDE_RELEASE_MS, (v) => { glideReleaseV = v; });
   bindThreshold("smoothInput", CUR_SMOOTH, (v) => { curSmoothV = v; });
   bindThreshold("decelLowInput", DECEL_LOW, (v) => { decelLowV = v; });
   bindThreshold("decelHighInput", DECEL_HIGH, (v) => { decelHighV = v; });
@@ -880,17 +884,15 @@
     if (absJerkGuard) targetDamp *= aJerkDamp;
     if (decelGuard) targetDamp *= decelDamp;
 
-    // Attack/release: snap closed instantly when more damping is called for,
-    // but reopen slowly (over the release time) so a brief signal dip doesn't
-    // un-clamp the prediction mid-disturbance. When off, apply target directly.
-    const releaseMs = debugOn ? guardReleaseV : GUARD_RELEASE_MS;
-    if (attackRelease) {
-      if (targetDamp <= guardDamp) {
-        guardDamp = targetDamp; // attack
-      } else {
-        const k = 1 - Math.exp(-(frameDt * 1000) / releaseMs); // release
-        guardDamp += (targetDamp - guardDamp) * k;
-      }
+    // Damp glide: ease `guardDamp` toward the target in both directions, with a
+    // separate (faster) attack time when engaging more damping and a release
+    // time when backing off — so no direction snaps. When off, apply directly.
+    if (dampGlide) {
+      const atkMs = debugOn ? glideAttackV : GLIDE_ATTACK_MS;
+      const relMs = debugOn ? glideReleaseV : GLIDE_RELEASE_MS;
+      const tau = targetDamp < guardDamp ? atkMs : relMs; // more damping vs less
+      const k = 1 - Math.exp(-(frameDt * 1000) / tau);
+      guardDamp += (targetDamp - guardDamp) * k;
     } else {
       guardDamp = targetDamp; // keep state in sync so toggling is seamless
     }
