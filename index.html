@@ -370,7 +370,7 @@
   // Damp glide: ease the combined guard damping toward its target in both
   // directions (over separate attack/release times) instead of snapping, so a
   // guard engaging abruptly doesn't slam `damp` and cause its own flicker.
-  let smoothing = false;
+  let smoothing = true;
   let prediction = true;
   let accelGuard = true;
   let signedJerkGuard = false;
@@ -465,7 +465,7 @@
   const LEAD_MS = 90;            // how far ahead to predict (ms)
   const MAX_LEAD_ANGLE = 0.6;    // clamp on predicted rotation (radians)
   const VEL_SMOOTH = 0.35;       // angular-velocity smoothing (0-1)
-  const CUR_SMOOTH = 0.5;        // light de-jitter easing toward the prediction
+  const CUR_SMOOTH = 0.9;        // light de-jitter easing toward the prediction
   const OLD_SMOOTH = 0.15;       // pre-update easing (used when prediction off)
   const STALE_MS = 120;          // drop velocity if readings stop coming
 
