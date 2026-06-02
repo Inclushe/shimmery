@@ -206,16 +206,15 @@
     color: #d8dde8;
     pointer-events: none; /* never intercept taps meant for the canvas */
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; row-gap: 2px;
-    align-content: start;
+    column-count: 2; column-gap: 14px;
   }
   #debug.hidden { display: none; }
   #debug h3 {
-    grid-column: 1 / -1;
+    column-span: all;
     font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
     color: rgba(255,255,255,.5); margin-bottom: 6px;
   }
-  .dbg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; min-width: 0; }
+  .dbg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; min-width: 0; break-inside: avoid; }
   .dbg-label { width: 52px; color: rgba(255,255,255,.65); white-space: nowrap; }
   .dbg-track {
     position: relative; flex: 1; height: 10px; border-radius: 2px;
