@@ -124,6 +124,18 @@
     font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 
+  /* Preset buttons for the inertial-settle inputs, revealed only in debug mode */
+  .presets { display: none; gap: 6px; margin: 6px 0 0 14px; flex-wrap: wrap; }
+  body.debug .presets { display: flex; }
+  .presets button {
+    padding: 3px 12px;
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 999px;
+    background: rgba(20,22,30,0.6); color: rgba(255,255,255,0.85);
+    font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    cursor: pointer; transition: background .15s ease;
+  }
+  .presets button:active { background: rgba(255,255,255,0.18); }
+
   /* Info button (bottom-right) */
   #infoBtn {
     position: fixed;
@@ -293,6 +305,11 @@
         <div class="field"><span>track</span><input type="number" id="trackStiffInput" step="10" /></div>
         <div class="field"><span>anchor</span><input type="number" id="anchorStiffInput" step="0.5" /></div>
         <div class="field"><span>damp</span><input type="number" id="dampStiffInput" step="1" /></div>
+      </div>
+      <div class="presets">
+        <button type="button" data-preset="soft">Soft</button>
+        <button type="button" data-preset="calm">Calm</button>
+        <button type="button" data-preset="snap">Snap</button>
       </div>
     </div>
     <div class="opt">
@@ -559,6 +576,28 @@
   bindThreshold("trackStiffInput", TRACK_STIFF, (v) => { trackStiffV = v; });
   bindThreshold("anchorStiffInput", ANCHOR_STIFF, (v) => { anchorStiffV = v; });
   bindThreshold("dampStiffInput", DAMP_STIFF, (v) => { dampStiffV = v; });
+
+  // Inertial-settle presets, spanning the damping spectrum (damp = 2*sqrt(track)*zeta):
+  //   Soft = overdamped (zeta~1.1), smoothest/most jitter-rejecting, slow aim
+  //   Calm = critical (zeta=1.0), fastest approach with no overshoot
+  //   Snap = underdamped (zeta=0.7), lively with a small predictive overshoot
+  // Each writes the four inputs and fires their `input` event to update the live values.
+  const settlePresets = {
+    soft: { settleSpeedInput: 1.0, trackStiffInput: 1000, anchorStiffInput: 1, dampStiffInput: 70 },
+    calm: { settleSpeedInput: 1.0, trackStiffInput: 1600, anchorStiffInput: 1, dampStiffInput: 80 },
+    snap: { settleSpeedInput: 1.0, trackStiffInput: 2500, anchorStiffInput: 1, dampStiffInput: 70 },
+  };
+  document.querySelectorAll(".presets button[data-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const p = settlePresets[btn.dataset.preset];
+      if (!p) return;
+      for (const id in p) {
+        const el = document.getElementById(id);
+        el.value = p[id];
+        el.dispatchEvent(new Event("input")); // reuse bindThreshold's listener to update the *V var
+      }
+    });
+  });
   bindThreshold("accSmoothInput", ACC_SMOOTH, (v) => { accSmoothV = v; });
   bindThreshold("sjerkSmoothInput", JERK_SMOOTH, (v) => { sjerkSmoothV = v; });
   bindThreshold("ajerkSmoothInput", ABSJERK_SMOOTH, (v) => { ajerkSmoothV = v; });
