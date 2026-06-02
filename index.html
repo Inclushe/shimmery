@@ -109,10 +109,12 @@
   #modeToggle .seg-opt.active { background: #fff; color: #14161e; }
 
   /* Per-guard threshold editors, revealed only in debug mode */
-  .thresh { display: none; gap: 8px; margin: 0 0 0 14px; align-items: center; }
+  .thresh { display: none; gap: 8px; margin: 0 0 0 14px; align-items: flex-start; flex-wrap: wrap; }
   body.debug .thresh { display: flex; }
-  .thresh span {
-    color: rgba(255,255,255,0.7); font-size: 12px; font-weight: 600;
+  .thresh .field { display: flex; flex-direction: column; gap: 2px; }
+  .thresh .field span {
+    color: rgba(255,255,255,0.55);
+    font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   .thresh input[type="number"] {
@@ -248,31 +250,52 @@
     </div>
     <div class="opt">
       <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
-      <div class="thresh"><span>low</span><input type="number" id="accLowInput" step="0.5" /><span>high</span><input type="number" id="accHighInput" step="0.5" /></div>
+      <div class="thresh">
+        <div class="field"><span>low</span><input type="number" id="accLowInput" step="0.5" /></div>
+        <div class="field"><span>high</span><input type="number" id="accHighInput" step="0.5" /></div>
+        <div class="field"><span>smooth</span><input type="number" id="accSmoothInput" step="0.05" min="0" max="1" /></div>
+      </div>
     </div>
     <div class="opt">
       <label><input type="checkbox" id="sjerkCheck" /> Jerk guard</label>
-      <div class="thresh"><span>low</span><input type="number" id="sjerkLowInput" step="1" /><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
+      <div class="thresh">
+        <div class="field"><span>low</span><input type="number" id="sjerkLowInput" step="1" /></div>
+        <div class="field"><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
+      </div>
     </div>
     <div class="opt">
       <label><input type="checkbox" id="ajerkCheck" checked /> Absolute jerk guard</label>
-      <div class="thresh"><span>low</span><input type="number" id="ajerkLowInput" step="1" /><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
+      <div class="thresh">
+        <div class="field"><span>low</span><input type="number" id="ajerkLowInput" step="1" /></div>
+        <div class="field"><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
+      </div>
     </div>
     <div class="opt">
       <label><input type="checkbox" id="attackCheck" checked /> Attack/release</label>
-      <div class="thresh"><span>release ms</span><input type="number" id="releaseInput" step="50" /></div>
+      <div class="thresh">
+        <div class="field"><span>release ms</span><input type="number" id="releaseInput" step="50" /></div>
+      </div>
     </div>
     <div class="opt">
       <label><input type="checkbox" id="decelCheck" checked /> Decel guard</label>
-      <div class="thresh"><span>low</span><input type="number" id="decelLowInput" step="1" /><span>high</span><input type="number" id="decelHighInput" step="1" /></div>
+      <div class="thresh">
+        <div class="field"><span>low</span><input type="number" id="decelLowInput" step="1" /></div>
+        <div class="field"><span>high</span><input type="number" id="decelHighInput" step="1" /></div>
+        <div class="field"><span>smooth</span><input type="number" id="decelSmoothInput" step="0.05" min="0" max="1" /></div>
+      </div>
     </div>
     <div class="opt">
       <label><input type="checkbox" id="eqCheck" checked /> Slow equilibrium</label>
-      <div class="thresh"><span>ms</span><input type="number" id="eqMsInput" step="100" /><span>speed</span><input type="number" id="eqSpeedInput" step="0.1" /></div>
+      <div class="thresh">
+        <div class="field"><span>ms</span><input type="number" id="eqMsInput" step="100" /></div>
+        <div class="field"><span>speed</span><input type="number" id="eqSpeedInput" step="0.1" /></div>
+      </div>
     </div>
     <div class="opt">
       <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
-      <div class="thresh"><span>factor</span><input type="number" id="smoothInput" step="0.05" min="0" max="1" /></div>
+      <div class="thresh">
+        <div class="field"><span>factor</span><input type="number" id="smoothInput" step="0.05" min="0" max="1" /></div>
+      </div>
     </div>
     <div class="opt">
       <label><input type="checkbox" id="debugCheck" /> Debug</label>
@@ -483,6 +506,8 @@
   let guardReleaseV = GUARD_RELEASE_MS;
   let curSmoothV = CUR_SMOOTH;
   let eqMsV = EQ_TIME_MS, eqSpeedV = EQ_SPEED;
+  let accSmoothV = ACC_SMOOTH;   // EMA factor for accel/jerk/absJerk (debug-editable)
+  let decelSmoothV = DECEL_SMOOTH;
 
   // Bind a number input to a setter, seeded with the constant default.
   function bindThreshold(id, initial, set) {
@@ -505,6 +530,8 @@
   bindThreshold("decelHighInput", DECEL_HIGH, (v) => { decelHighV = v; });
   bindThreshold("eqMsInput", EQ_TIME_MS, (v) => { eqMsV = v; });
   bindThreshold("eqSpeedInput", EQ_SPEED, (v) => { eqSpeedV = v; });
+  bindThreshold("accSmoothInput", ACC_SMOOTH, (v) => { accSmoothV = v; });
+  bindThreshold("decelSmoothInput", DECEL_SMOOTH, (v) => { decelSmoothV = v; });
 
   // --- Dot grid ---------------------------------------------------------
   // Each dot also carries `target`: a random unit vector representing an
@@ -632,7 +659,7 @@
         // Angular deceleration (rad/s^2), rectified to the slowing-down part
         // only and EMA-smoothed; drives the Decel guard (idea 1).
         const decel = Math.max(0, (prevSpeed - angSpeed) / dt);
-        angDecel += (decel - angDecel) * DECEL_SMOOTH;
+        angDecel += (decel - angDecel) * (debugOn ? decelSmoothV : DECEL_SMOOTH);
         if (al > 1e-6) angAxis = [ax / al, ay / al, az / al];
       }
     }
@@ -657,7 +684,7 @@
     if (!lin) return; // device either reports `acceleration` or it doesn't
     const now = performance.now();
     const m = Math.hypot(lin.x || 0, lin.y || 0, lin.z || 0);
-    accelMag += (m - accelMag) * ACC_SMOOTH;
+    accelMag += (m - accelMag) * (debugOn ? accSmoothV : ACC_SMOOTH);
 
     // Jerk: rate of change of the (smoothed) acceleration magnitude. We keep a
     // smoothed signed jerk for reference, plus `absJerk` — the rectify-then-
@@ -667,8 +694,9 @@
       const dt = (now - prevMotionTime) / 1000;
       if (dt > 0) {
         const rawJerk = (accelMag - prevAccelMag) / dt;
-        jerkMag += (rawJerk - jerkMag) * ACC_SMOOTH;
-        absJerk += (Math.abs(rawJerk) - absJerk) * ACC_SMOOTH;
+        const js = debugOn ? accSmoothV : ACC_SMOOTH;
+        jerkMag += (rawJerk - jerkMag) * js;
+        absJerk += (Math.abs(rawJerk) - absJerk) * js;
       }
     }
     prevAccelMag = accelMag;
