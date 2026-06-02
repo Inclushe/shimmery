@@ -503,13 +503,14 @@
   // coasts to a stop under DAMP_STIFF. A weak always-on spring (ANCHOR_STIFF)
   // re-centers `cur` on the true measured vector over seconds to kill drift.
   const SETTLE_SPEED = 1.0;      // rad/s; at/above this the measurement drive is full
-  const TRACK_STIFF  = 1600;     // 1/s^2; strong tracking spring (gated by measured speed)
-  const ANCHOR_STIFF = 3;        // 1/s^2; weak constant spring toward measVec (drift correction)
-  const DAMP_STIFF   = 56;       // 1/s; velocity damping. damp = 2*sqrt(track)*zeta; zeta=0.7
+  const TRACK_STIFF  = 2500;     // 1/s^2; strong tracking spring (gated by measured speed)
+  const ANCHOR_STIFF = 1;        // 1/s^2; weak constant spring toward measVec (drift correction)
+  const DAMP_STIFF   = 70;       // 1/s; velocity damping. damp = 2*sqrt(track)*zeta; zeta=0.7
                                  // here is slightly underdamped so the predAngle lead reads as a
-                                 // small overshoot. Spring lag ~2*zeta/sqrt(track) (~35ms) < 90ms
-                                 // lead, so cur leads the raw sensor. (Stable to 30fps: keep
-                                 // track < (2/dt)^2 and damp < 2/dt.)
+                                 // small overshoot. Spring lag ~2*zeta/sqrt(track) (~28ms) < 90ms
+                                 // lead, so cur leads the raw sensor by ~62ms. (The dt clamp in
+                                 // frame() keeps the explicit integrators under their stability
+                                 // bound, so damp can exceed 2/dt at low frame rates.)
 
   // Live, debug-editable copies of each guard's LOW/HIGH band. Default to the
   // constants above; the number inputs (visible only in debug mode) update
@@ -851,7 +852,11 @@
   // --- Render loop ------------------------------------------------------
   function frame(ts) {
     const now = ts || performance.now();
-    const frameDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
+    // Clamp dt so a frame-rate hitch can't push the explicit integrators past
+    // their stability bound (damp < 2/dt). At <=45fps-equiv we just advance a
+    // bit less than real time for that frame — imperceptible, keeps tuning safe.
+    let frameDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
+    if (frameDt > 1 / 45) frameDt = 1 / 45;
     lastFrameTime = now;
 
     // If readings have stopped arriving (device held still), relax the
