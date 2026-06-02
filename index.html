@@ -261,6 +261,7 @@
       <div class="thresh">
         <div class="field"><span>low</span><input type="number" id="sjerkLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
+        <div class="field"><span>smooth</span><input type="number" id="sjerkSmoothInput" step="0.05" min="0" max="1" /></div>
       </div>
     </div>
     <div class="opt">
@@ -268,6 +269,7 @@
       <div class="thresh">
         <div class="field"><span>low</span><input type="number" id="ajerkLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
+        <div class="field"><span>smooth</span><input type="number" id="ajerkSmoothInput" step="0.05" min="0" max="1" /></div>
       </div>
     </div>
     <div class="opt">
@@ -476,11 +478,13 @@
   // Signed jerk guard: ramp keyed off |smoothed signed jerk|.
   const JERK_LOW = 10;           // below this (m/s^3) prediction is untouched
   const JERK_HIGH = 15;          // above this the prediction is fully damped
+  const JERK_SMOOTH = 0.4;       // EMA factor for the signed jerk
 
   // AbsJerk guard: ramp keyed off the rectify-then-smooth envelope, which reads
   // higher and has a nonzero noise floor, so it gets its own (higher) band.
   const ABSJERK_LOW = 15;        // below this (m/s^3) prediction is untouched
   const ABSJERK_HIGH = 30;       // above this the prediction is fully damped
+  const ABSJERK_SMOOTH = 0.4;    // EMA factor for the rectified-jerk envelope
 
   // Damp glide: ease the combined guard damping toward its target with separate
   // time constants for engaging (toward more damping / 0) and releasing (toward 1).
@@ -509,7 +513,9 @@
   let glideAttackV = GLIDE_ATTACK_MS, glideReleaseV = GLIDE_RELEASE_MS;
   let curSmoothV = CUR_SMOOTH;
   let eqMsV = EQ_TIME_MS, eqSpeedV = EQ_SPEED;
-  let accSmoothV = ACC_SMOOTH;   // EMA factor for accel/jerk/absJerk (debug-editable)
+  let accSmoothV = ACC_SMOOTH;       // EMA factor for accel magnitude (debug-editable)
+  let sjerkSmoothV = JERK_SMOOTH;    // EMA factor for signed jerk
+  let ajerkSmoothV = ABSJERK_SMOOTH; // EMA factor for the rectified-jerk envelope
   let decelSmoothV = DECEL_SMOOTH;
 
   // Bind a number input to a setter, seeded with the constant default.
@@ -535,6 +541,8 @@
   bindThreshold("eqMsInput", EQ_TIME_MS, (v) => { eqMsV = v; });
   bindThreshold("eqSpeedInput", EQ_SPEED, (v) => { eqSpeedV = v; });
   bindThreshold("accSmoothInput", ACC_SMOOTH, (v) => { accSmoothV = v; });
+  bindThreshold("sjerkSmoothInput", JERK_SMOOTH, (v) => { sjerkSmoothV = v; });
+  bindThreshold("ajerkSmoothInput", ABSJERK_SMOOTH, (v) => { ajerkSmoothV = v; });
   bindThreshold("decelSmoothInput", DECEL_SMOOTH, (v) => { decelSmoothV = v; });
 
   // --- Dot grid ---------------------------------------------------------
@@ -698,9 +706,8 @@
       const dt = (now - prevMotionTime) / 1000;
       if (dt > 0) {
         const rawJerk = (accelMag - prevAccelMag) / dt;
-        const js = debugOn ? accSmoothV : ACC_SMOOTH;
-        jerkMag += (rawJerk - jerkMag) * js;
-        absJerk += (Math.abs(rawJerk) - absJerk) * js;
+        jerkMag += (rawJerk - jerkMag) * (debugOn ? sjerkSmoothV : JERK_SMOOTH);
+        absJerk += (Math.abs(rawJerk) - absJerk) * (debugOn ? ajerkSmoothV : ABSJERK_SMOOTH);
       }
     }
     prevAccelMag = accelMag;
