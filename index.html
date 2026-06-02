@@ -489,9 +489,9 @@
 
   // Decel guard (idea 1): damp the prediction while angular speed is dropping
   // fast (end of an abrupt motion), so the lagging predAngle can't overshoot.
-  const DECEL_LOW = 8;           // below this (rad/s^2) prediction is untouched
-  const DECEL_HIGH = 20;         // above this the prediction is fully damped
-  const DECEL_SMOOTH = 0.4;      // EMA factor for the angular-deceleration signal
+  const DECEL_LOW = 20;          // below this (rad/s^2) prediction is untouched
+  const DECEL_HIGH = 30;         // above this the prediction is fully damped
+  const DECEL_SMOOTH = 0.2;      // EMA factor for the angular-deceleration signal
 
   // Slow equilibrium (idea 2): near rest, ease `cur` toward the target slowly
   // (over EQ_TIME_MS) instead of snapping, low-passing the settling ring out.
