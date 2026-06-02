@@ -52,14 +52,19 @@
     font-size: 14px; font-weight: 400; color: rgba(255,255,255,0.85);
   }
 
-  /* Toggle group */
+  /* Toggle group — two-column grid */
   #toggles {
     position: fixed;
     left: calc(env(safe-area-inset-left, 0px) + 16px);
     bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
     z-index: 10;
-    display: flex; flex-direction: column; gap: 8px;
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 8px;
+    align-items: start;
   }
+  #toggles .opt { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  #toggles .full { grid-column: 1 / -1; }
   #toggles label {
     display: flex; align-items: center; gap: 8px;
     padding: 9px 14px;
@@ -104,7 +109,7 @@
   #modeToggle .seg-opt.active { background: #fff; color: #14161e; }
 
   /* Per-guard threshold editors, revealed only in debug mode */
-  .thresh { display: none; gap: 8px; margin: -2px 0 2px 14px; align-items: center; }
+  .thresh { display: none; gap: 8px; margin: 0 0 0 14px; align-items: center; }
   body.debug .thresh { display: flex; }
   .thresh span {
     color: rgba(255,255,255,0.7); font-size: 12px; font-weight: 600;
@@ -183,13 +188,13 @@
   }
   #fixLink.hidden { display: none; }
 
-  /* Debug overlay (top-left), toggled by the Debug checkbox */
+  /* Debug overlay (top-left), toggled by the Debug checkbox — two-column grid */
   #debug {
     position: fixed;
     top: calc(env(safe-area-inset-top, 0px) + 16px);
     left: calc(env(safe-area-inset-left, 0px) + 16px);
     z-index: 15;
-    width: 232px;
+    width: 392px;
     padding: 10px 12px;
     border: 1px solid rgba(255,255,255,0.15);
     border-radius: 10px;
@@ -199,14 +204,17 @@
     color: #d8dde8;
     pointer-events: none; /* never intercept taps meant for the canvas */
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; row-gap: 2px;
+    align-content: start;
   }
   #debug.hidden { display: none; }
   #debug h3 {
+    grid-column: 1 / -1;
     font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
     color: rgba(255,255,255,.5); margin-bottom: 6px;
   }
-  .dbg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
-  .dbg-label { width: 58px; color: rgba(255,255,255,.65); white-space: nowrap; }
+  .dbg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; min-width: 0; }
+  .dbg-label { width: 52px; color: rgba(255,255,255,.65); white-space: nowrap; }
   .dbg-track {
     position: relative; flex: 1; height: 10px; border-radius: 2px;
     background: rgba(255,255,255,.08); overflow: hidden;
@@ -234,23 +242,43 @@
     </div>
   </div>
   <div id="toggles">
-    <div id="modeToggle" role="group" aria-label="Orientation mode">
+    <div id="modeToggle" class="full" role="group" aria-label="Orientation mode">
       <button type="button" class="seg-opt" data-mode="raw">Raw Sensor</button>
       <button type="button" class="seg-opt active" data-mode="predicted">Predicted</button>
     </div>
-    <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
-    <div class="thresh"><span>low</span><input type="number" id="accLowInput" step="0.5" /><span>high</span><input type="number" id="accHighInput" step="0.5" /></div>
-    <label><input type="checkbox" id="sjerkCheck" /> Jerk guard</label>
-    <div class="thresh"><span>low</span><input type="number" id="sjerkLowInput" step="1" /><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
-    <label><input type="checkbox" id="ajerkCheck" checked /> Absolute jerk guard</label>
-    <div class="thresh"><span>low</span><input type="number" id="ajerkLowInput" step="1" /><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
-    <label><input type="checkbox" id="attackCheck" checked /> Attack/release</label>
-    <div class="thresh"><span>release ms</span><input type="number" id="releaseInput" step="50" /></div>
-    <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
-    <div class="thresh"><span>factor</span><input type="number" id="smoothInput" step="0.05" min="0" max="1" /></div>
-    <label><input type="checkbox" id="debugCheck" /> Debug</label>
-    <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
-    <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
+    <div class="opt">
+      <label><input type="checkbox" id="accelCheck" checked /> Accel guard</label>
+      <div class="thresh"><span>low</span><input type="number" id="accLowInput" step="0.5" /><span>high</span><input type="number" id="accHighInput" step="0.5" /></div>
+    </div>
+    <div class="opt">
+      <label><input type="checkbox" id="sjerkCheck" /> Jerk guard</label>
+      <div class="thresh"><span>low</span><input type="number" id="sjerkLowInput" step="1" /><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
+    </div>
+    <div class="opt">
+      <label><input type="checkbox" id="ajerkCheck" checked /> Absolute jerk guard</label>
+      <div class="thresh"><span>low</span><input type="number" id="ajerkLowInput" step="1" /><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
+    </div>
+    <div class="opt">
+      <label><input type="checkbox" id="attackCheck" checked /> Attack/release</label>
+      <div class="thresh"><span>release ms</span><input type="number" id="releaseInput" step="50" /></div>
+    </div>
+    <div class="opt">
+      <label><input type="checkbox" id="decelCheck" checked /> Decel guard</label>
+      <div class="thresh"><span>low</span><input type="number" id="decelLowInput" step="1" /><span>high</span><input type="number" id="decelHighInput" step="1" /></div>
+    </div>
+    <div class="opt">
+      <label><input type="checkbox" id="eqCheck" checked /> Slow equilibrium</label>
+      <div class="thresh"><span>ms</span><input type="number" id="eqMsInput" step="100" /><span>speed</span><input type="number" id="eqSpeedInput" step="0.1" /></div>
+    </div>
+    <div class="opt">
+      <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
+      <div class="thresh"><span>factor</span><input type="number" id="smoothInput" step="0.05" min="0" max="1" /></div>
+    </div>
+    <div class="opt">
+      <label><input type="checkbox" id="debugCheck" /> Debug</label>
+    </div>
+    <label id="densityRow" class="full">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
+    <label id="sizeRow" class="full">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
   </div>
 
   <div id="debug" class="hidden" aria-hidden="true"></div>
@@ -300,6 +328,8 @@
   const sjerkCheck = document.getElementById("sjerkCheck");
   const ajerkCheck = document.getElementById("ajerkCheck");
   const attackCheck = document.getElementById("attackCheck");
+  const decelCheck = document.getElementById("decelCheck");
+  const eqCheck = document.getElementById("eqCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
   // Orientation mode (see the segmented toggle below): "Predicted" extrapolates
@@ -319,11 +349,15 @@
   let signedJerkGuard = false;
   let absJerkGuard = true;
   let attackRelease = true;
+  let decelGuard = true;   // idea 1: damp prediction during abrupt deceleration
+  let slowEq = true;       // idea 2: ease slowly to rest while settling
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
   sjerkCheck.addEventListener("change", () => { signedJerkGuard = sjerkCheck.checked; });
   ajerkCheck.addEventListener("change", () => { absJerkGuard = ajerkCheck.checked; });
   attackCheck.addEventListener("change", () => { attackRelease = attackCheck.checked; });
+  decelCheck.addEventListener("change", () => { decelGuard = decelCheck.checked; });
+  eqCheck.addEventListener("change", () => { slowEq = eqCheck.checked; });
 
   // Orientation mode: segmented "Raw Sensor" / "Predicted" toggle. In Raw
   // Sensor mode the prediction is off and every prediction-related option is
@@ -337,6 +371,8 @@
     { box: sjerkCheck,  set: (v) => { signedJerkGuard = v; } },
     { box: ajerkCheck,  set: (v) => { absJerkGuard = v; } },
     { box: attackCheck, set: (v) => { attackRelease = v; } },
+    { box: decelCheck,  set: (v) => { decelGuard = v; } },
+    { box: eqCheck,     set: (v) => { slowEq = v; } },
     { box: smoothCheck, set: (v) => { smoothing = v; } },
   ];
   function setMode(predicted) {
@@ -425,14 +461,28 @@
   // ms, bridging brief dips in the guard signal (e.g. jerk crossing zero).
   const GUARD_RELEASE_MS = 50;
 
+  // Decel guard (idea 1): damp the prediction while angular speed is dropping
+  // fast (end of an abrupt motion), so the lagging predAngle can't overshoot.
+  const DECEL_LOW = 8;           // below this (rad/s^2) prediction is untouched
+  const DECEL_HIGH = 20;         // above this the prediction is fully damped
+  const DECEL_SMOOTH = 0.4;      // EMA factor for the angular-deceleration signal
+
+  // Slow equilibrium (idea 2): near rest, ease `cur` toward the target slowly
+  // (over EQ_TIME_MS) instead of snapping, low-passing the settling ring out.
+  // Above EQ_SPEED the normal eager easing is used (full predictive feel).
+  const EQ_TIME_MS = 1500;       // settling time constant at rest (ms)
+  const EQ_SPEED = 1.0;          // rad/s; above this, easing is fully eager
+
   // Live, debug-editable copies of each guard's LOW/HIGH band. Default to the
   // constants above; the number inputs (visible only in debug mode) update
   // these, and frame() uses them in place of the constants when debug is on.
   let accLowV = ACC_LOW, accHighV = ACC_HIGH;
   let sjerkLowV = JERK_LOW, sjerkHighV = JERK_HIGH;
   let ajerkLowV = ABSJERK_LOW, ajerkHighV = ABSJERK_HIGH;
+  let decelLowV = DECEL_LOW, decelHighV = DECEL_HIGH;
   let guardReleaseV = GUARD_RELEASE_MS;
   let curSmoothV = CUR_SMOOTH;
+  let eqMsV = EQ_TIME_MS, eqSpeedV = EQ_SPEED;
 
   // Bind a number input to a setter, seeded with the constant default.
   function bindThreshold(id, initial, set) {
@@ -451,6 +501,10 @@
   bindThreshold("ajerkHighInput", ABSJERK_HIGH, (v) => { ajerkHighV = v; });
   bindThreshold("releaseInput", GUARD_RELEASE_MS, (v) => { guardReleaseV = v; });
   bindThreshold("smoothInput", CUR_SMOOTH, (v) => { curSmoothV = v; });
+  bindThreshold("decelLowInput", DECEL_LOW, (v) => { decelLowV = v; });
+  bindThreshold("decelHighInput", DECEL_HIGH, (v) => { decelHighV = v; });
+  bindThreshold("eqMsInput", EQ_TIME_MS, (v) => { eqMsV = v; });
+  bindThreshold("eqSpeedInput", EQ_SPEED, (v) => { eqSpeedV = v; });
 
   // --- Dot grid ---------------------------------------------------------
   // Each dot also carries `target`: a random unit vector representing an
@@ -506,6 +560,7 @@
   let prevMeas = null;           // previous measured vector
   let prevMeasTime = 0;          // timestamp of that measurement (ms)
   let angSpeed = 0;              // smoothed angular speed (rad/s)
+  let angDecel = 0;              // smoothed angular deceleration (rad/s^2), event-driven
   let angAxis = [0, 0, 1];       // axis the vector is rotating about
   let lastFrameTime = 0;
   let hasData = false;           // true once the first orientation reading lands
@@ -572,7 +627,12 @@
         let az = prevMeas[0] * newVec[1] - prevMeas[1] * newVec[0];
         const al = Math.hypot(ax, ay, az);
         const instSpeed = angle / dt;
+        const prevSpeed = angSpeed;
         angSpeed += (instSpeed - angSpeed) * VEL_SMOOTH;
+        // Angular deceleration (rad/s^2), rectified to the slowing-down part
+        // only and EMA-smoothed; drives the Decel guard (idea 1).
+        const decel = Math.max(0, (prevSpeed - angSpeed) / dt);
+        angDecel += (decel - angDecel) * DECEL_SMOOTH;
         if (al > 1e-6) angAxis = [ax / al, ay / al, az / al];
       }
     }
@@ -617,7 +677,7 @@
 
   // --- Debug overlay ----------------------------------------------------
   // Values computed inside frame() that the overlay needs to read back.
-  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, sJerkDamp: 1, aJerkDamp: 1, predAngle: 0, fps: 0 };
+  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, sJerkDamp: 1, aJerkDamp: 1, decelDamp: 1, eq: 1, predAngle: 0, fps: 0 };
 
   // Each metric: a live accessor, a bar range, and a formatter. `bip` draws a
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
@@ -635,6 +695,11 @@
       ticks: [{ at: () => ajerkLowV, color: "#ff9b3b", dashed: true }, { at: () => ajerkHighV, color: "#ff5b5b" }],
       color: (v) => v >= ajerkHighV ? "#ff5b5b" : (v >= ajerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
+    { label: "decel",   get: () => angDecel,      min: 0, max: 40, enabled: () => decelGuard,
+      ticks: [{ at: () => decelLowV, color: "#ff9b3b", dashed: true }, { at: () => decelHighV, color: "#ff5b5b" }],
+      color: (v) => v >= decelHighV ? "#ff5b5b" : (v >= decelLowV ? "#ff9b3b" : "#5b9bff"),
+      fmt: (v) => v.toFixed(1) },
+    { label: "eq",      get: () => dbg.eq,        min: 0, max: 1, enabled: () => slowEq, fmt: (v) => v.toFixed(2) },
     { label: "tgtDamp", get: () => dbg.targetDamp, min: 0, max: 1, fmt: (v) => v.toFixed(2) },
     { label: "damp",    get: () => dbg.damp,      min: 0, max: 1, fmt: (v) => v.toFixed(2) },
     { label: "angVel",  get: () => angSpeed,      min: 0, max: 6, fmt: (v) => v.toFixed(2) },
@@ -740,7 +805,7 @@
 
     // If readings have stopped arriving (device held still), relax the
     // velocity so the prediction doesn't keep drifting.
-    if (now - prevMeasTime > STALE_MS) angSpeed = 0;
+    if (now - prevMeasTime > STALE_MS) { angSpeed = 0; angDecel = 0; }
 
     // Predict the orientation LEAD_MS ahead from angular velocity. (An
     // acceleration term was dropped: a 2nd derivative of low-rate, quantized
@@ -772,12 +837,20 @@
     let aJerkDamp = 1 - (absJerk - ajerkLow) / (ajerkHigh - ajerkLow);
     if (aJerkDamp < 0) aJerkDamp = 0; else if (aJerkDamp > 1) aJerkDamp = 1;
 
+    // Decel guard (idea 1): ramp keyed off angular deceleration, damping the
+    // prediction as a motion ends abruptly so the lagging lead can't overshoot.
+    const decLow = debugOn ? decelLowV : DECEL_LOW;
+    const decHigh = debugOn ? decelHighV : DECEL_HIGH;
+    let decelDamp = 1 - (angDecel - decLow) / (decHigh - decLow);
+    if (decelDamp < 0) decelDamp = 0; else if (decelDamp > 1) decelDamp = 1;
+
     // Instantaneous target = product of the enabled guards. (Ramps are always
     // computed so the debug overlay can show them; applied only when on.)
     let targetDamp = 1;
     if (accelGuard) targetDamp *= accDamp;
     if (signedJerkGuard) targetDamp *= sJerkDamp;
     if (absJerkGuard) targetDamp *= aJerkDamp;
+    if (decelGuard) targetDamp *= decelDamp;
 
     // Attack/release: snap closed instantly when more damping is called for,
     // but reopen slowly (over the release time) so a brief signal dip doesn't
@@ -802,6 +875,21 @@
     // Ease toward the target; snap if smoothing is off. With prediction off we
     // use the original 0.15 easing so the comparison is faithful.
     let kSmooth = prediction ? (debugOn ? curSmoothV : CUR_SMOOTH) : OLD_SMOOTH;
+
+    // Slow equilibrium (idea 2): as angular speed falls below EQ_SPEED, blend
+    // the easing toward a slow, frame-rate-independent factor (time constant
+    // EQ_TIME_MS) so `cur` creeps to rest instead of snapping — low-passing the
+    // settling ring out. Full eager easing while still moving (speed >= EQ_SPEED).
+    let eqDbg = 1;
+    if (slowEq && prediction && smoothing) {
+      const eqMs = debugOn ? eqMsV : EQ_TIME_MS;
+      const eqSpeed = debugOn ? eqSpeedV : EQ_SPEED;
+      let settle = 1 - angSpeed / eqSpeed;   // 0 moving -> 1 at rest
+      if (settle < 0) settle = 0; else if (settle > 1) settle = 1;
+      eqDbg = settle;
+      const kSlow = 1 - Math.exp(-(frameDt * 1000) / eqMs);
+      kSmooth = kSmooth + (kSlow - kSmooth) * settle; // lerp eager -> slow
+    }
     if (!smoothing) kSmooth = 1;
     cur[0] += (target[0] - cur[0]) * kSmooth;
     cur[1] += (target[1] - cur[1]) * kSmooth;
@@ -839,6 +927,8 @@
       dbg.accDamp = accDamp;
       dbg.sJerkDamp = sJerkDamp;
       dbg.aJerkDamp = aJerkDamp;
+      dbg.decelDamp = decelDamp;
+      dbg.eq = eqDbg;
       dbg.predAngle = predAngle;
       if (frameDt > 0) dbg.fps += (1 / frameDt - dbg.fps) * 0.1;
       updateDebug();
