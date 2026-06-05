@@ -62,7 +62,7 @@
     grid-template-columns: repeat(2, auto);
     gap: 8px;
     align-items: start;
-    max-height: calc(100dvh - 32px); /* the option list can outgrow the screen */
+    max-height: 50dvh; /* at most half the screen; the option list scrolls beyond that */
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: 4px; /* room for the scrollbar so it doesn't cover toggles */
