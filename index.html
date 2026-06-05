@@ -892,15 +892,16 @@
       ticks: [{ at: () => ajerkLowV, color: "#ff9b3b", dashed: true }, { at: () => ajerkHighV, color: "#ff5b5b" }],
       color: (v) => v >= ajerkHighV ? "#ff5b5b" : (v >= ajerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
-    // Angular deceleration (rad/s^2, from DeviceOrientation). Drives the Angular
-    // decel guard AND Dynamic speed, so it reads active when either is on.
-    { label: "ang dec", get: () => angDecel,      min: 0, max: 40, enabled: () => decelGuard || dynSpeed,
-      ticks: [{ at: () => decelLowV, color: "#ff9b3b", dashed: true }, { at: () => decelHighV, color: "#ff5b5b" }],
-      color: (v) => v >= decelHighV ? "#ff5b5b" : (v >= decelLowV ? "#ff9b3b" : "#5b9bff"),
-      fmt: (v) => v.toFixed(1) },
+    // Angular signals (rad/s, rad/s^2) from DeviceOrientation, grouped together.
+    { label: "ang vel", get: () => angSpeed,      min: 0, max: 6, fmt: (v) => v.toFixed(2) },
     { label: "ang acc", get: () => angAccel,      min: 0, max: 40, enabled: () => angAccelGuard,
       ticks: [{ at: () => angAccLowV, color: "#ff9b3b", dashed: true }, { at: () => angAccHighV, color: "#ff5b5b" }],
       color: (v) => v >= angAccHighV ? "#ff5b5b" : (v >= angAccLowV ? "#ff9b3b" : "#5b9bff"),
+      fmt: (v) => v.toFixed(1) },
+    // ang dec drives the Angular decel guard AND Dynamic speed (active if either on).
+    { label: "ang dec", get: () => angDecel,      min: 0, max: 40, enabled: () => decelGuard || dynSpeed,
+      ticks: [{ at: () => decelLowV, color: "#ff9b3b", dashed: true }, { at: () => decelHighV, color: "#ff5b5b" }],
+      color: (v) => v >= decelHighV ? "#ff5b5b" : (v >= decelLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     { label: "drive",   get: () => dbg.drive,     min: 0, max: 1, enabled: () => inertia, fmt: (v) => v.toFixed(2) },
     { label: "speed",   get: () => dbg.speed,     min: 0, max: 30, enabled: () => inertia, fmt: (v) => v.toFixed(1) },
@@ -908,7 +909,6 @@
       min: 0, max: 120, enabled: () => leadComp && inertia, fmt: (v) => v.toFixed(0) },
     { label: "tgtDamp", get: () => dbg.targetDamp, min: 0, max: 1, fmt: (v) => v.toFixed(2) },
     { label: "damp",    get: () => dbg.damp,      min: 0, max: 1, fmt: (v) => v.toFixed(2) },
-    { label: "ang vel", get: () => angSpeed,      min: 0, max: 6, fmt: (v) => v.toFixed(2) },
     { label: "predAng", get: () => dbg.predAngle, min: -MAX_LEAD_ANGLE, max: MAX_LEAD_ANGLE, bip: true, fmt: (v) => v.toFixed(3) },
     // Compact: x/y/z as three mini bipolar bars in one row, no per-axis text/value.
     { label: "meas",    multi: () => measVec,     min: -1, max: 1, bip: true },
