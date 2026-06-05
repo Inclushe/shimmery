@@ -968,7 +968,7 @@
       color: (v) => v >= angAccHighV ? "#ff5b5b" : (v >= angAccLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     // ang dec drives the Angular decel guard AND Dynamic speed (active if either on).
-    { label: "ang dec", get: () => angDecel,      min: 0, max: 40, enabled: () => decelGuard || dynSpeed,
+    { label: "ang dec", get: () => angDecel,      min: 0, max: 40, enabled: () => decelGuard || dynSpeed, tickEnabled: () => decelGuard,
       ticks: [{ at: () => decelLowV, color: "#ff9b3b", dashed: true }, { at: () => decelHighV, color: "#ff5b5b" }],
       color: (v) => v >= decelHighV ? "#ff5b5b" : (v >= decelLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
@@ -1102,7 +1102,8 @@
         for (let i = 0; i < m._tickEls.length; i++) {
           const at = m.ticks[i].at();
           m._tickEls[i].style.left = (100 * (at - m.min) / (m.max - m.min)) + "%";
-          const tickColor = enabled ? m.ticks[i].color : "rgba(255,255,255,0.25)";
+          const ticksOn = m.tickEnabled ? m.tickEnabled() : enabled;
+          const tickColor = ticksOn ? m.ticks[i].color : "rgba(255,255,255,0.25)";
           m._tickEls[i].style.background = tickBg(tickColor, m.ticks[i].dashed);
         }
       }
