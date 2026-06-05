@@ -360,12 +360,15 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="accelGateCheck" checked /> Accel gate</label>
+      <label><input type="checkbox" id="accelGateCheck" checked /> Accel gate<button type="button" class="glide-btn active" id="agGlideBtn">glide</button></label>
       <div class="thresh">
         <div class="field"><span>acc hi</span><input type="number" id="agAccHiInput" step="0.5" /></div>
         <div class="field"><span>acc lo</span><input type="number" id="agAccLoInput" step="0.5" /></div>
         <div class="field"><span>spd lo</span><input type="number" id="agSpdLoInput" step="0.1" /></div>
         <div class="field"><span>spd hi</span><input type="number" id="agSpdHiInput" step="1" /></div>
+        <div class="break"></div>
+        <div class="field"><span>atk ms</span><input type="number" id="agAtkInput" step="50" /></div>
+        <div class="field"><span>rel ms</span><input type="number" id="agRelInput" step="50" /></div>
       </div>
     </div>
     <div class="opt">
@@ -464,6 +467,7 @@
   let inertia = true;      // inertial settle: cur coasts to rest, weak anchor to truth
   let dynSpeed = false;    // ramp the settle drive-saturation speed up with deceleration
   let accelGate = true;    // latch settle speed low on flick onset, high at motion end
+  let agGlide = true;      // glide the accel-gate speed between its latched values
   let leadComp = true;     // extend the lead by the spring's damp/track lag so net = LEAD_MS
   // Per-guard / dynamic-speed glide enables (default on).
   let accGlide = true, sjerkGlide = true, ajerkGlide = true,
@@ -496,6 +500,7 @@
   bindGlideBtn("decelGlideBtn", (v) => { decelGlide = v; });
   bindGlideBtn("angAccGlideBtn", (v) => { angAccGlide = v; });
   bindGlideBtn("dynGlideBtn", (v) => { dynGlide = v; });
+  bindGlideBtn("agGlideBtn", (v) => { agGlide = v; });
 
   // Orientation mode: segmented "Raw Sensor" / "Predicted" toggle. In Raw
   // Sensor mode the prediction is off and every prediction-related option is
@@ -682,6 +687,7 @@
   let agAccHiV = AGATE_ACC_HI, agAccLoV = AGATE_ACC_LO;
   let agSpdLoV = AGATE_SPD_LO, agSpdHiV = AGATE_SPD_HI;
   let agSpeed = AGATE_SPD_HI;   // latched accel-gate speed, persists across frames
+  let agAtkV = GLIDE_ATTACK_MS, agRelV = GLIDE_RELEASE_MS;
   let accSmoothV = ACC_SMOOTH;       // EMA factor for accel magnitude (debug-editable)
   let sjerkSmoothV = JERK_SMOOTH;    // EMA factor for signed jerk
   let ajerkSmoothV = ABSJERK_SMOOTH; // EMA factor for the rectified-jerk envelope
@@ -744,6 +750,8 @@
   bindThreshold("agAccLoInput", AGATE_ACC_LO, (v) => { agAccLoV = v; });
   bindThreshold("agSpdLoInput", AGATE_SPD_LO, (v) => { agSpdLoV = v; });
   bindThreshold("agSpdHiInput", AGATE_SPD_HI, (v) => { agSpdHiV = v; });
+  bindThreshold("agAtkInput", GLIDE_ATTACK_MS, (v) => { agAtkV = v; });
+  bindThreshold("agRelInput", GLIDE_RELEASE_MS, (v) => { agRelV = v; });
 
   // Inertial-settle presets, spanning the damping spectrum (damp = 2*sqrt(track)*zeta):
   //   Soft = overdamped (zeta~1.1), smoothest/most jitter-rejecting, slow aim
@@ -1259,8 +1267,11 @@
         effSpeed = agSpeed;
       }
       // Glide the effective speed (attack as it rises -> releases tracking) so
-      // the drive gate eases instead of snapping when deceleration spikes.
-      effSpeed = glide(spdGl, effSpeed, dynGlide, spdAtkV, spdRelV, frameDt * 1000, false);
+      // the drive gate eases instead of snapping. Use the active method's glide.
+      const glOn  = accelGate ? agGlide : dynGlide;
+      const glAtk = accelGate ? agAtkV : spdAtkV;
+      const glRel = accelGate ? agRelV : spdRelV;
+      effSpeed = glide(spdGl, effSpeed, glOn, glAtk, glRel, frameDt * 1000, false);
       speedDbg = effSpeed;
       let drive = effSpeed > 0 ? angSpeed / effSpeed : 1; // 1 while moving -> 0 at rest
       if (drive > 1) drive = 1; else if (drive < 0) drive = 0;
