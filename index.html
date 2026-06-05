@@ -340,35 +340,13 @@
         <div class="field"><span>track</span><input type="number" id="trackStiffInput" step="10" /></div>
         <div class="field"><span>anchor</span><input type="number" id="anchorStiffInput" step="0.5" /></div>
         <div class="field"><span>damp</span><input type="number" id="dampStiffInput" step="1" /></div>
+        <div class="field"><span>floor</span><input type="number" id="settleFloorInput" step="0.02" /></div>
+        <div class="field"><span>gsmooth</span><input type="number" id="gateSmoothInput" step="0.02" min="0" max="1" /></div>
       </div>
       <div class="presets">
         <button type="button" data-preset="soft">Soft</button>
         <button type="button" data-preset="calm">Calm</button>
         <button type="button" data-preset="snap">Snap</button>
-      </div>
-    </div>
-    <div class="opt">
-      <label><input type="checkbox" id="dynSpeedCheck" /> Dynamic speed<button type="button" class="glide-btn active" id="dynGlideBtn">glide</button></label>
-      <div class="thresh">
-        <div class="field"><span>spd lo</span><input type="number" id="dynSpdLoInput" step="0.1" /></div>
-        <div class="field"><span>spd hi</span><input type="number" id="dynSpdHiInput" step="1" /></div>
-        <div class="field"><span>dec lo</span><input type="number" id="dynDecLoInput" step="1" /></div>
-        <div class="field"><span>dec hi</span><input type="number" id="dynDecHiInput" step="1" /></div>
-        <div class="break"></div>
-        <div class="field"><span>atk ms</span><input type="number" id="spdAtkInput" step="50" /></div>
-        <div class="field"><span>rel ms</span><input type="number" id="spdRelInput" step="50" /></div>
-      </div>
-    </div>
-    <div class="opt">
-      <label><input type="checkbox" id="accelGateCheck" checked /> Accel gate<button type="button" class="glide-btn active" id="agGlideBtn">glide</button></label>
-      <div class="thresh">
-        <div class="field"><span>acc hi</span><input type="number" id="agAccHiInput" step="0.5" /></div>
-        <div class="field"><span>acc lo</span><input type="number" id="agAccLoInput" step="0.5" /></div>
-        <div class="field"><span>spd lo</span><input type="number" id="agSpdLoInput" step="0.1" /></div>
-        <div class="field"><span>spd hi</span><input type="number" id="agSpdHiInput" step="1" /></div>
-        <div class="break"></div>
-        <div class="field"><span>atk ms</span><input type="number" id="agAtkInput" step="50" /></div>
-        <div class="field"><span>rel ms</span><input type="number" id="agRelInput" step="50" /></div>
       </div>
     </div>
     <div class="opt">
@@ -436,8 +414,6 @@
   const decelCheck = document.getElementById("decelCheck");
   const angAccelCheck = document.getElementById("angAccelCheck");
   const inertiaCheck = document.getElementById("inertiaCheck");
-  const dynSpeedCheck = document.getElementById("dynSpeedCheck");
-  const accelGateCheck = document.getElementById("accelGateCheck");
   const leadCompCheck = document.getElementById("leadCompCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
@@ -465,13 +441,10 @@
   let decelGuard = true;   // idea 1: damp prediction during abrupt deceleration
   let angAccelGuard = false; // damp prediction during abrupt rotation onset (off: it opposes snappy onset)
   let inertia = true;      // inertial settle: cur coasts to rest, weak anchor to truth
-  let dynSpeed = false;    // ramp the settle drive-saturation speed up with deceleration
-  let accelGate = true;    // latch settle speed low on flick onset, high at motion end
-  let agGlide = true;      // glide the accel-gate speed between its latched values
   let leadComp = true;     // extend the lead by the spring's damp/track lag so net = LEAD_MS
-  // Per-guard / dynamic-speed glide enables (default on).
+  // Per-guard glide enables (default on).
   let accGlide = true, sjerkGlide = true, ajerkGlide = true,
-      decelGlide = true, angAccGlide = true, dynGlide = true;
+      decelGlide = true, angAccGlide = true;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
   sjerkCheck.addEventListener("change", () => { signedJerkGuard = sjerkCheck.checked; });
@@ -479,8 +452,6 @@
   decelCheck.addEventListener("change", () => { decelGuard = decelCheck.checked; });
   angAccelCheck.addEventListener("change", () => { angAccelGuard = angAccelCheck.checked; });
   inertiaCheck.addEventListener("change", () => { inertia = inertiaCheck.checked; });
-  dynSpeedCheck.addEventListener("change", () => { dynSpeed = dynSpeedCheck.checked; });
-  accelGateCheck.addEventListener("change", () => { accelGate = accelGateCheck.checked; });
   leadCompCheck.addEventListener("change", () => { leadComp = leadCompCheck.checked; });
   // Glide pill toggles (one per guard + dynamic speed): flip the .active class
   // and the backing flag on click. Seeded active in the markup (all default on).
@@ -499,8 +470,6 @@
   bindGlideBtn("ajerkGlideBtn", (v) => { ajerkGlide = v; });
   bindGlideBtn("decelGlideBtn", (v) => { decelGlide = v; });
   bindGlideBtn("angAccGlideBtn", (v) => { angAccGlide = v; });
-  bindGlideBtn("dynGlideBtn", (v) => { dynGlide = v; });
-  bindGlideBtn("agGlideBtn", (v) => { agGlide = v; });
 
   // Orientation mode: segmented "Raw Sensor" / "Predicted" toggle. In Raw
   // Sensor mode the prediction is off and every prediction-related option is
@@ -516,8 +485,6 @@
     { box: decelCheck,  set: (v) => { decelGuard = v; } },
     { box: angAccelCheck, set: (v) => { angAccelGuard = v; } },
     { box: inertiaCheck, set: (v) => { inertia = v; } },
-    { box: dynSpeedCheck, set: (v) => { dynSpeed = v; } },
-    { box: accelGateCheck, set: (v) => { accelGate = v; } },
     { box: leadCompCheck, set: (v) => { leadComp = v; } },
     { box: smoothCheck, set: (v) => { smoothing = v; } },
   ];
@@ -584,6 +551,7 @@
   const LEAD_MS = 90;            // how far ahead to predict (ms)
   const MAX_LEAD_ANGLE = 0.6;    // clamp on predicted rotation (radians)
   const VEL_SMOOTH = 0.35;       // angular-velocity smoothing (0-1)
+  const GATE_SMOOTH = 0.1;       // heavier EMA for the drive-gate signal (stabler rest level)
   const CUR_SMOOTH = 0.9;        // light de-jitter easing toward the prediction
   const OLD_SMOOTH = 0.15;       // pre-update easing (used when prediction off)
   const STALE_MS = 120;          // drop velocity if readings stop coming
@@ -641,25 +609,11 @@
                                  // lead, so cur leads the raw sensor by ~62ms. (The dt clamp in
                                  // frame() keeps the explicit integrators under their stability
                                  // bound, so damp can exceed 2/dt at low frame rates.)
-
-  // Dynamic settle speed: ramp the drive-saturation speed from DYN_SPEED_LOW
-  // (still/accelerating -> snappy onset) up to DYN_SPEED_HIGH as angular
-  // deceleration rises across [DYN_DECEL_LOW, DYN_DECEL_HIGH], so the end of a
-  // motion releases tracking and the spring coasts to the measured spot.
-  const DYN_SPEED_LOW  = 1.0;   // rad/s; drive-saturation speed at low decel
-  const DYN_SPEED_HIGH = 28;    // rad/s; at/above DYN_DECEL_HIGH
-  const DYN_DECEL_LOW  = 20;    // rad/s^2; below this, speed = low
-  const DYN_DECEL_HIGH = 30;    // rad/s^2; above this, speed = high
-
-  // Accel gate (alternative to Dynamic speed): a latched drive-saturation speed.
-  // On a flick onset (angular accel above AGATE_ACC_HI) it snaps speed LOW so the
-  // spring tracks hard; at the end of a motion (angular accel back below
-  // AGATE_ACC_LO while angular decel exceeds it) it snaps speed HIGH so the drive
-  // releases and `cur` coasts in. Holds between transitions.
-  const AGATE_ACC_HI = 1;   // rad/s^2; accel above this -> speed = low (snappy onset)
-  const AGATE_ACC_LO = 2;   // rad/s^2; accel below this (and decel above it) -> speed high
-  const AGATE_SPD_LO = 0.5; // rad/s; tracking speed during onset
-  const AGATE_SPD_HI = 30;  // rad/s; release speed at motion end
+  // Noise-floor deadband on the drive gate: the smoothed gate signal sits at a
+  // positive rest level (rectified sensor noise has a positive mean), so below
+  // SETTLE_FLOOR drive is forced to 0 and the stiff spring fully releases (cur
+  // coasts/anchors slowly). Any real motion exceeds the floor and drives fully.
+  const SETTLE_FLOOR = 0.15;     // rad/s; drive is 0 below this gate level
 
   // Live, debug-editable copies of each guard's LOW/HIGH band. Default to the
   // constants above; the number inputs (visible only in debug mode) update
@@ -676,18 +630,12 @@
   let ajerkAtkV = GLIDE_ATTACK_MS, ajerkRelV = GLIDE_RELEASE_MS;
   let decelAtkV = GLIDE_ATTACK_MS, decelRelV = GLIDE_RELEASE_MS;
   let angAccAtkV = GLIDE_ATTACK_MS, angAccRelV = GLIDE_RELEASE_MS;
-  let spdAtkV = GLIDE_ATTACK_MS, spdRelV = GLIDE_RELEASE_MS;
   const accGl = { v: 1 }, sjerkGl = { v: 1 }, ajerkGl = { v: 1 },
-        decelGl = { v: 1 }, angAccGl = { v: 1 }, spdGl = { v: SETTLE_SPEED };
+        decelGl = { v: 1 }, angAccGl = { v: 1 };
   let curSmoothV = CUR_SMOOTH;
   let settleSpeedV = SETTLE_SPEED, trackStiffV = TRACK_STIFF,
       anchorStiffV = ANCHOR_STIFF, dampStiffV = DAMP_STIFF;
-  let dynSpdLoV = DYN_SPEED_LOW, dynSpdHiV = DYN_SPEED_HIGH;
-  let dynDecLoV = DYN_DECEL_LOW, dynDecHiV = DYN_DECEL_HIGH;
-  let agAccHiV = AGATE_ACC_HI, agAccLoV = AGATE_ACC_LO;
-  let agSpdLoV = AGATE_SPD_LO, agSpdHiV = AGATE_SPD_HI;
-  let agSpeed = AGATE_SPD_HI;   // latched accel-gate speed, persists across frames
-  let agAtkV = GLIDE_ATTACK_MS, agRelV = GLIDE_RELEASE_MS;
+  let settleFloorV = SETTLE_FLOOR, gateSmoothV = GATE_SMOOTH;
   let accSmoothV = ACC_SMOOTH;       // EMA factor for accel magnitude (debug-editable)
   let sjerkSmoothV = JERK_SMOOTH;    // EMA factor for signed jerk
   let ajerkSmoothV = ABSJERK_SMOOTH; // EMA factor for the rectified-jerk envelope
@@ -731,8 +679,6 @@
   bindThreshold("decelRelInput", GLIDE_RELEASE_MS, (v) => { decelRelV = v; });
   bindThreshold("angAccAtkInput", GLIDE_ATTACK_MS, (v) => { angAccAtkV = v; });
   bindThreshold("angAccRelInput", GLIDE_RELEASE_MS, (v) => { angAccRelV = v; });
-  bindThreshold("spdAtkInput", GLIDE_ATTACK_MS, (v) => { spdAtkV = v; });
-  bindThreshold("spdRelInput", GLIDE_RELEASE_MS, (v) => { spdRelV = v; });
   bindThreshold("smoothInput", CUR_SMOOTH, (v) => { curSmoothV = v; });
   bindThreshold("decelLowInput", DECEL_LOW, (v) => { decelLowV = v; });
   bindThreshold("decelHighInput", DECEL_HIGH, (v) => { decelHighV = v; });
@@ -742,16 +688,8 @@
   bindThreshold("trackStiffInput", TRACK_STIFF, (v) => { trackStiffV = v; });
   bindThreshold("anchorStiffInput", ANCHOR_STIFF, (v) => { anchorStiffV = v; });
   bindThreshold("dampStiffInput", DAMP_STIFF, (v) => { dampStiffV = v; });
-  bindThreshold("dynSpdLoInput", DYN_SPEED_LOW, (v) => { dynSpdLoV = v; });
-  bindThreshold("dynSpdHiInput", DYN_SPEED_HIGH, (v) => { dynSpdHiV = v; });
-  bindThreshold("dynDecLoInput", DYN_DECEL_LOW, (v) => { dynDecLoV = v; });
-  bindThreshold("dynDecHiInput", DYN_DECEL_HIGH, (v) => { dynDecHiV = v; });
-  bindThreshold("agAccHiInput", AGATE_ACC_HI, (v) => { agAccHiV = v; });
-  bindThreshold("agAccLoInput", AGATE_ACC_LO, (v) => { agAccLoV = v; });
-  bindThreshold("agSpdLoInput", AGATE_SPD_LO, (v) => { agSpdLoV = v; });
-  bindThreshold("agSpdHiInput", AGATE_SPD_HI, (v) => { agSpdHiV = v; });
-  bindThreshold("agAtkInput", GLIDE_ATTACK_MS, (v) => { agAtkV = v; });
-  bindThreshold("agRelInput", GLIDE_RELEASE_MS, (v) => { agRelV = v; });
+  bindThreshold("settleFloorInput", SETTLE_FLOOR, (v) => { settleFloorV = v; });
+  bindThreshold("gateSmoothInput", GATE_SMOOTH, (v) => { gateSmoothV = v; });
 
   // Inertial-settle presets, spanning the damping spectrum (damp = 2*sqrt(track)*zeta):
   //   Soft = overdamped (zeta~1.1), smoothest/most jitter-rejecting, slow aim
@@ -854,6 +792,7 @@
   // --- ANGULAR / ROTATIONAL motion, derived from DeviceOrientation (NOT the
   // accelerometer): how the orientation vector is turning. ---
   let angSpeed = 0;              // smoothed angular speed (rad/s) of the orientation vector
+  let gateVel = 0;              // heavier-smoothed angular speed; feeds the deadband drive gate
   let angDecel = 0;              // smoothed angular deceleration (rad/s^2): rectified -d(angSpeed)/dt
   let angAccel = 0;              // smoothed angular acceleration (rad/s^2): rectified +d(angSpeed)/dt
   let angAxis = [0, 0, 1];       // axis the vector is rotating about
@@ -925,8 +864,11 @@
         const instSpeed = angle / dt;
         const prevSpeed = angSpeed;
         angSpeed += (instSpeed - angSpeed) * VEL_SMOOTH;
+        // Heavier-smoothed copy feeding the drive-gate deadband (stabler rest
+        // level than angSpeed, which stays responsive for the prediction).
+        gateVel += (angSpeed - gateVel) * (debugOn ? gateSmoothV : GATE_SMOOTH);
         // Angular deceleration (rad/s^2), rectified to the slowing-down part
-        // only and EMA-smoothed; drives the Angular decel guard + Dynamic speed.
+        // only and EMA-smoothed; drives the Angular decel guard.
         const decel = Math.max(0, (prevSpeed - angSpeed) / dt);
         angDecel += (decel - angDecel) * (debugOn ? decelSmoothV : DECEL_SMOOTH);
         // Angular acceleration (rad/s^2), rectified to the speeding-up part only;
@@ -981,7 +923,7 @@
 
   // --- Debug overlay ----------------------------------------------------
   // Values computed inside frame() that the overlay needs to read back.
-  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, sJerkDamp: 1, aJerkDamp: 1, decelDamp: 1, drive: 1, speed: SETTLE_SPEED, predAngle: 0, fps: 0, oriHz: 0, motHz: 0 };
+  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, sJerkDamp: 1, aJerkDamp: 1, decelDamp: 1, drive: 1, gate: 0, predAngle: 0, fps: 0, oriHz: 0, motHz: 0 };
 
   // Each metric: a live accessor, a bar range, and a formatter. `bip` draws a
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
@@ -1006,12 +948,15 @@
       color: (v) => v >= angAccHighV ? "#ff5b5b" : (v >= angAccLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     // ang dec drives the Angular decel guard AND Dynamic speed (active if either on).
-    { label: "ang dec", get: () => angDecel,      min: 0, max: 40, enabled: () => decelGuard || dynSpeed, tickEnabled: () => decelGuard,
+    { label: "ang dec", get: () => angDecel,      min: 0, max: 40, enabled: () => decelGuard, tickEnabled: () => decelGuard,
       ticks: [{ at: () => decelLowV, color: "#ff9b3b", dashed: true }, { at: () => decelHighV, color: "#ff5b5b" }],
       color: (v) => v >= decelHighV ? "#ff5b5b" : (v >= decelLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     { label: "drive",   get: () => dbg.drive,     min: 0, max: 1, enabled: () => inertia, fmt: (v) => v.toFixed(2) },
-    { label: "speed",   get: () => dbg.speed,     min: 0, max: 30, enabled: () => inertia, fmt: (v) => v.toFixed(1) },
+    { label: "gate",    get: () => dbg.gate,      min: 0, max: 3, enabled: () => inertia,
+      ticks: [{ at: () => settleFloorV, color: "#ff9b3b", dashed: true }],
+      color: (v) => v >= settleFloorV ? "#5b9bff" : "rgba(255,255,255,0.3)",
+      fmt: (v) => v.toFixed(2) },
     { label: "lag ms",  get: () => trackStiffV > 0 ? 1000 * dampStiffV / trackStiffV : 0,
       min: 0, max: 120, enabled: () => leadComp && inertia, fmt: (v) => v.toFixed(0) },
     { label: "tgtDamp", get: () => dbg.targetDamp, min: 0, max: 1, fmt: (v) => v.toFixed(2) },
@@ -1244,38 +1189,18 @@
     // reading. A weak always-on spring pulls `cur` back to the true measured
     // vector over seconds, killing the drift the coast would otherwise leave.
     // Semi-implicit (symplectic) Euler: update velocity, then position.
-    let driveDbg = 1, speedDbg = settleSpeedV;
+    let driveDbg = 1, gateDbg = 0;
     if (inertia && prediction) {
-      // These read the live values directly (not gated on debug) so the preset
-      // buttons and sliders tune the feel whether or not Debug is open.
-      // Effective drive-saturation speed: static (settleSpeedV) unless Dynamic
-      // speed ramps it up with angular deceleration so onset stays snappy but
-      // the end of a motion releases tracking and the spring coasts in smoothly.
-      let effSpeed = settleSpeedV;
-      if (dynSpeed) {
-        const denom = dynDecHiV - dynDecLoV;
-        let r = denom > 0 ? (angDecel - dynDecLoV) / denom : (angDecel >= dynDecHiV ? 1 : 0);
-        if (r < 0) r = 0; else if (r > 1) r = 1;
-        effSpeed = dynSpdLoV + (dynSpdHiV - dynSpdLoV) * r;
-      }
-      // Accel gate (overrides Dynamic speed when on): latch speed LOW on a flick
-      // onset (angular accel above acc-hi), HIGH at the motion's end (angular
-      // accel back below acc-lo); hold otherwise.
-      if (accelGate) {
-        if (angAccel > agAccHiV) agSpeed = agSpdLoV;
-        else if (angAccel < agAccLoV) agSpeed = agSpdHiV;
-        effSpeed = agSpeed;
-      }
-      // Glide the effective speed (attack as it rises -> releases tracking) so
-      // the drive gate eases instead of snapping. Use the active method's glide.
-      const glOn  = accelGate ? agGlide : dynGlide;
-      const glAtk = accelGate ? agAtkV : spdAtkV;
-      const glRel = accelGate ? agRelV : spdRelV;
-      effSpeed = glide(spdGl, effSpeed, glOn, glAtk, glRel, frameDt * 1000, false);
-      speedDbg = effSpeed;
-      let drive = effSpeed > 0 ? angSpeed / effSpeed : 1; // 1 while moving -> 0 at rest
-      if (drive > 1) drive = 1; else if (drive < 0) drive = 0;
+      // Drive gate with a noise-floor deadband: below `floor` (rest jitter) the
+      // smoothed gate signal yields drive 0 so the stiff spring fully releases
+      // and `cur` coasts to rest under damping (the weak anchor re-centers);
+      // above it any real motion (slow/fast/shake all exceed the floor)
+      // saturates the drive over `speed`, so tracking is fully preserved.
+      let drive = settleSpeedV > 0 ? (gateVel - settleFloorV) / settleSpeedV
+                                   : (gateVel > settleFloorV ? 1 : 0);
+      if (drive < 0) drive = 0; else if (drive > 1) drive = 1;
       driveDbg = drive;
+      gateDbg = gateVel;
       const kTrack  = trackStiffV * drive; // strong, gated off at rest
       const kAnchor = anchorStiffV;        // weak, always on
       const c       = dampStiffV;
@@ -1335,7 +1260,7 @@
       dbg.aJerkDamp = aJerkDamp;
       dbg.decelDamp = decelDamp;
       dbg.drive = driveDbg;
-      dbg.speed = speedDbg;
+      dbg.gate = gateDbg;
       dbg.predAngle = predAngle;
       if (frameDt > 0) dbg.fps += (1 / frameDt - dbg.fps) * 0.1;
       updateDebug();
