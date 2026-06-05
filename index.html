@@ -62,6 +62,10 @@
     grid-template-columns: repeat(2, auto);
     gap: 8px;
     align-items: start;
+    max-height: calc(100dvh - 32px); /* the option list can outgrow the screen */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px; /* room for the scrollbar so it doesn't cover toggles */
   }
   #toggles .opt { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   #toggles .full { grid-column: 1 / -1; }
@@ -291,6 +295,14 @@
       </div>
     </div>
     <div class="opt">
+      <label><input type="checkbox" id="angAccelCheck" /> Angular accel guard</label>
+      <div class="thresh">
+        <div class="field"><span>low</span><input type="number" id="angAccLowInput" step="1" /></div>
+        <div class="field"><span>high</span><input type="number" id="angAccHighInput" step="1" /></div>
+        <div class="field"><span>smooth</span><input type="number" id="angAccSmoothInput" step="0.05" min="0" max="1" /></div>
+      </div>
+    </div>
+    <div class="opt">
       <label><input type="checkbox" id="decelCheck" checked /> Angular decel guard</label>
       <div class="thresh">
         <div class="field"><span>low</span><input type="number" id="decelLowInput" step="1" /></div>
@@ -385,6 +397,7 @@
   const ajerkCheck = document.getElementById("ajerkCheck");
   const glideCheck = document.getElementById("glideCheck");
   const decelCheck = document.getElementById("decelCheck");
+  const angAccelCheck = document.getElementById("angAccelCheck");
   const inertiaCheck = document.getElementById("inertiaCheck");
   const dynSpeedCheck = document.getElementById("dynSpeedCheck");
   const leadCompCheck = document.getElementById("leadCompCheck");
@@ -413,6 +426,7 @@
   let absJerkGuard = true;
   let dampGlide = true;
   let decelGuard = true;   // idea 1: damp prediction during abrupt deceleration
+  let angAccelGuard = false; // damp prediction during abrupt rotation onset (off: it opposes snappy onset)
   let inertia = true;      // inertial settle: cur coasts to rest, weak anchor to truth
   let dynSpeed = true;     // ramp the settle drive-saturation speed up with deceleration
   let leadComp = true;     // extend the lead by the spring's damp/track lag so net = LEAD_MS
@@ -422,6 +436,7 @@
   ajerkCheck.addEventListener("change", () => { absJerkGuard = ajerkCheck.checked; });
   glideCheck.addEventListener("change", () => { dampGlide = glideCheck.checked; });
   decelCheck.addEventListener("change", () => { decelGuard = decelCheck.checked; });
+  angAccelCheck.addEventListener("change", () => { angAccelGuard = angAccelCheck.checked; });
   inertiaCheck.addEventListener("change", () => { inertia = inertiaCheck.checked; });
   dynSpeedCheck.addEventListener("change", () => { dynSpeed = dynSpeedCheck.checked; });
   leadCompCheck.addEventListener("change", () => { leadComp = leadCompCheck.checked; });
@@ -439,6 +454,7 @@
     { box: ajerkCheck,  set: (v) => { absJerkGuard = v; } },
     { box: glideCheck,  set: (v) => { dampGlide = v; } },
     { box: decelCheck,  set: (v) => { decelGuard = v; } },
+    { box: angAccelCheck, set: (v) => { angAccelGuard = v; } },
     { box: inertiaCheck, set: (v) => { inertia = v; } },
     { box: dynSpeedCheck, set: (v) => { dynSpeed = v; } },
     { box: leadCompCheck, set: (v) => { leadComp = v; } },
@@ -544,6 +560,13 @@
   const DECEL_HIGH = 30;         // above this the prediction is fully damped
   const DECEL_SMOOTH = 0.2;      // EMA factor for the angular-deceleration signal
 
+  // Angular accel guard: the speeding-up counterpart of the decel guard. Damp the
+  // prediction while ANGULAR acceleration (rotation rate ramping up at the onset
+  // of a flick, from DeviceOrientation) is high, so a sharp start can't overshoot.
+  const ANGACC_LOW = 20;         // below this (rad/s^2) prediction is untouched
+  const ANGACC_HIGH = 30;        // above this the prediction is fully damped
+  const ANGACC_SMOOTH = 0.2;     // EMA factor for the angular-acceleration signal
+
   // Inertial settle: `cur` carries its own velocity. A speed-gated strong spring
   // tracks the prediction while moving; near rest that drive fades and `cur`
   // coasts to a stop under DAMP_STIFF. A weak always-on spring (ANCHOR_STIFF)
@@ -574,6 +597,7 @@
   let sjerkLowV = JERK_LOW, sjerkHighV = JERK_HIGH;
   let ajerkLowV = ABSJERK_LOW, ajerkHighV = ABSJERK_HIGH;
   let decelLowV = DECEL_LOW, decelHighV = DECEL_HIGH;
+  let angAccLowV = ANGACC_LOW, angAccHighV = ANGACC_HIGH;
   let glideAttackV = GLIDE_ATTACK_MS, glideReleaseV = GLIDE_RELEASE_MS;
   let curSmoothV = CUR_SMOOTH;
   let settleSpeedV = SETTLE_SPEED, trackStiffV = TRACK_STIFF,
@@ -584,6 +608,7 @@
   let sjerkSmoothV = JERK_SMOOTH;    // EMA factor for signed jerk
   let ajerkSmoothV = ABSJERK_SMOOTH; // EMA factor for the rectified-jerk envelope
   let decelSmoothV = DECEL_SMOOTH;
+  let angAccSmoothV = ANGACC_SMOOTH;
 
   // Bind a number input to a setter, seeded with the constant default.
   function bindThreshold(id, initial, set) {
@@ -605,6 +630,8 @@
   bindThreshold("smoothInput", CUR_SMOOTH, (v) => { curSmoothV = v; });
   bindThreshold("decelLowInput", DECEL_LOW, (v) => { decelLowV = v; });
   bindThreshold("decelHighInput", DECEL_HIGH, (v) => { decelHighV = v; });
+  bindThreshold("angAccLowInput", ANGACC_LOW, (v) => { angAccLowV = v; });
+  bindThreshold("angAccHighInput", ANGACC_HIGH, (v) => { angAccHighV = v; });
   bindThreshold("settleSpeedInput", SETTLE_SPEED, (v) => { settleSpeedV = v; });
   bindThreshold("trackStiffInput", TRACK_STIFF, (v) => { trackStiffV = v; });
   bindThreshold("anchorStiffInput", ANCHOR_STIFF, (v) => { anchorStiffV = v; });
@@ -656,6 +683,7 @@
   bindThreshold("sjerkSmoothInput", JERK_SMOOTH, (v) => { sjerkSmoothV = v; });
   bindThreshold("ajerkSmoothInput", ABSJERK_SMOOTH, (v) => { ajerkSmoothV = v; });
   bindThreshold("decelSmoothInput", DECEL_SMOOTH, (v) => { decelSmoothV = v; });
+  bindThreshold("angAccSmoothInput", ANGACC_SMOOTH, (v) => { angAccSmoothV = v; });
 
   // --- Dot grid ---------------------------------------------------------
   // Each dot also carries `target`: a random unit vector representing an
@@ -715,6 +743,7 @@
   // accelerometer): how the orientation vector is turning. ---
   let angSpeed = 0;              // smoothed angular speed (rad/s) of the orientation vector
   let angDecel = 0;              // smoothed angular deceleration (rad/s^2): rectified -d(angSpeed)/dt
+  let angAccel = 0;              // smoothed angular acceleration (rad/s^2): rectified +d(angSpeed)/dt
   let angAxis = [0, 0, 1];       // axis the vector is rotating about
   let lastFrameTime = 0;
   let hasData = false;           // true once the first orientation reading lands
@@ -789,6 +818,10 @@
         // only and EMA-smoothed; drives the Angular decel guard + Dynamic speed.
         const decel = Math.max(0, (prevSpeed - angSpeed) / dt);
         angDecel += (decel - angDecel) * (debugOn ? decelSmoothV : DECEL_SMOOTH);
+        // Angular acceleration (rad/s^2), rectified to the speeding-up part only;
+        // drives the Angular accel guard (damp the prediction at rotation onset).
+        const angAcc = Math.max(0, (angSpeed - prevSpeed) / dt);
+        angAccel += (angAcc - angAccel) * (debugOn ? angAccSmoothV : ANGACC_SMOOTH);
         if (al > 1e-6) angAxis = [ax / al, ay / al, az / al];
         dbg.oriHz += (1 / dt - dbg.oriHz) * 0.1; // DeviceOrientation sample rate (debug)
       }
@@ -860,6 +893,10 @@
     { label: "ang dec", get: () => angDecel,      min: 0, max: 40, enabled: () => decelGuard || dynSpeed,
       ticks: [{ at: () => decelLowV, color: "#ff9b3b", dashed: true }, { at: () => decelHighV, color: "#ff5b5b" }],
       color: (v) => v >= decelHighV ? "#ff5b5b" : (v >= decelLowV ? "#ff9b3b" : "#5b9bff"),
+      fmt: (v) => v.toFixed(1) },
+    { label: "ang acc", get: () => angAccel,      min: 0, max: 40, enabled: () => angAccelGuard,
+      ticks: [{ at: () => angAccLowV, color: "#ff9b3b", dashed: true }, { at: () => angAccHighV, color: "#ff5b5b" }],
+      color: (v) => v >= angAccHighV ? "#ff5b5b" : (v >= angAccLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     { label: "drive",   get: () => dbg.drive,     min: 0, max: 1, enabled: () => inertia, fmt: (v) => v.toFixed(2) },
     { label: "speed",   get: () => dbg.speed,     min: 0, max: 30, enabled: () => inertia, fmt: (v) => v.toFixed(1) },
@@ -1023,6 +1060,13 @@
     let decelDamp = 1 - (angDecel - decLow) / (decHigh - decLow);
     if (decelDamp < 0) decelDamp = 0; else if (decelDamp > 1) decelDamp = 1;
 
+    // Angular accel guard: ramp keyed off angular acceleration (rotation onset),
+    // damping the prediction as a flick starts so a sharp start can't overshoot.
+    const aaLow = debugOn ? angAccLowV : ANGACC_LOW;
+    const aaHigh = debugOn ? angAccHighV : ANGACC_HIGH;
+    let angAccDamp = 1 - (angAccel - aaLow) / (aaHigh - aaLow);
+    if (angAccDamp < 0) angAccDamp = 0; else if (angAccDamp > 1) angAccDamp = 1;
+
     // Instantaneous target = product of the enabled guards. (Ramps are always
     // computed so the debug overlay can show them; applied only when on.)
     let targetDamp = 1;
@@ -1030,6 +1074,7 @@
     if (signedJerkGuard) targetDamp *= sJerkDamp;
     if (absJerkGuard) targetDamp *= aJerkDamp;
     if (decelGuard) targetDamp *= decelDamp;
+    if (angAccelGuard) targetDamp *= angAccDamp;
 
     // Damp glide: ease `guardDamp` toward the target in both directions, with a
     // separate (faster) attack time when engaging more damping and a release
