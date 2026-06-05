@@ -129,13 +129,20 @@
   }
   .thresh.guard input[type="number"] { width: 3ch; }
   .thresh .break { flex-basis: 100%; height: 0; }
-  .thresh .glide-tog {
-    display: flex; align-items: center; gap: 3px; align-self: center;
-    font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
-    color: rgba(255,255,255,0.55);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Glide on/off, a pill toggle living at the right of a guard's main label.
+     Styled like the inertial-settle presets; revealed only in debug mode. */
+  .glide-btn {
+    display: none; margin-left: auto;
+    padding: 3px 12px;
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 999px;
+    background: rgba(20,22,30,0.6); color: rgba(255,255,255,0.85);
+    font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-weight: 600; letter-spacing: normal; text-transform: none;
+    cursor: pointer; transition: background .15s ease, color .15s ease;
   }
-  .thresh .glide-tog input { margin: 0; }
+  body.debug .glide-btn { display: inline-block; }
+  .glide-btn:active { background: rgba(255,255,255,0.18); }
+  .glide-btn.active { background: #fff; color: #14161e; border-color: #fff; }
 
   /* Preset buttons for the inertial-settle inputs (shown whether or not debug is on) */
   .presets { display: flex; gap: 6px; margin: 6px 0 0 14px; flex-wrap: wrap; }
@@ -277,56 +284,51 @@
       <button type="button" class="seg-opt active" data-mode="predicted">Predicted</button>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="accelCheck" checked /> Linear accel guard</label>
+      <label><input type="checkbox" id="accelCheck" checked /> Linear accel guard<button type="button" class="glide-btn active" id="accGlideBtn">glide</button></label>
       <div class="thresh guard">
         <div class="field"><span>low</span><input type="number" id="accLowInput" step="0.5" /></div>
         <div class="field"><span>high</span><input type="number" id="accHighInput" step="0.5" /></div>
         <div class="field"><span>smooth</span><input type="number" id="accSmoothInput" step="0.05" min="0" max="1" /></div>
-        <label class="glide-tog"><input type="checkbox" id="accGlideCheck" checked />glide</label>
         <div class="field"><span>atk ms</span><input type="number" id="accAtkInput" step="50" /></div>
         <div class="field"><span>rel ms</span><input type="number" id="accRelInput" step="50" /></div>
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="sjerkCheck" /> Jerk guard</label>
+      <label><input type="checkbox" id="sjerkCheck" /> Jerk guard<button type="button" class="glide-btn active" id="sjerkGlideBtn">glide</button></label>
       <div class="thresh guard">
         <div class="field"><span>low</span><input type="number" id="sjerkLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
         <div class="field"><span>smooth</span><input type="number" id="sjerkSmoothInput" step="0.05" min="0" max="1" /></div>
-        <label class="glide-tog"><input type="checkbox" id="sjerkGlideCheck" checked />glide</label>
         <div class="field"><span>atk ms</span><input type="number" id="sjerkAtkInput" step="50" /></div>
         <div class="field"><span>rel ms</span><input type="number" id="sjerkRelInput" step="50" /></div>
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="ajerkCheck" checked /> Absolute jerk guard</label>
+      <label><input type="checkbox" id="ajerkCheck" checked /> Absolute jerk guard<button type="button" class="glide-btn active" id="ajerkGlideBtn">glide</button></label>
       <div class="thresh guard">
         <div class="field"><span>low</span><input type="number" id="ajerkLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
         <div class="field"><span>smooth</span><input type="number" id="ajerkSmoothInput" step="0.05" min="0" max="1" /></div>
-        <label class="glide-tog"><input type="checkbox" id="ajerkGlideCheck" checked />glide</label>
         <div class="field"><span>atk ms</span><input type="number" id="ajerkAtkInput" step="50" /></div>
         <div class="field"><span>rel ms</span><input type="number" id="ajerkRelInput" step="50" /></div>
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="angAccelCheck" /> Angular accel guard</label>
+      <label><input type="checkbox" id="angAccelCheck" /> Angular accel guard<button type="button" class="glide-btn active" id="angAccGlideBtn">glide</button></label>
       <div class="thresh guard">
         <div class="field"><span>low</span><input type="number" id="angAccLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="angAccHighInput" step="1" /></div>
         <div class="field"><span>smooth</span><input type="number" id="angAccSmoothInput" step="0.05" min="0" max="1" /></div>
-        <label class="glide-tog"><input type="checkbox" id="angAccGlideCheck" checked />glide</label>
         <div class="field"><span>atk ms</span><input type="number" id="angAccAtkInput" step="50" /></div>
         <div class="field"><span>rel ms</span><input type="number" id="angAccRelInput" step="50" /></div>
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="decelCheck" checked /> Angular decel guard</label>
+      <label><input type="checkbox" id="decelCheck" checked /> Angular decel guard<button type="button" class="glide-btn active" id="decelGlideBtn">glide</button></label>
       <div class="thresh guard">
         <div class="field"><span>low</span><input type="number" id="decelLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="decelHighInput" step="1" /></div>
         <div class="field"><span>smooth</span><input type="number" id="decelSmoothInput" step="0.05" min="0" max="1" /></div>
-        <label class="glide-tog"><input type="checkbox" id="decelGlideCheck" checked />glide</label>
         <div class="field"><span>atk ms</span><input type="number" id="decelAtkInput" step="50" /></div>
         <div class="field"><span>rel ms</span><input type="number" id="decelRelInput" step="50" /></div>
       </div>
@@ -346,14 +348,13 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="dynSpeedCheck" checked /> Dynamic speed</label>
+      <label><input type="checkbox" id="dynSpeedCheck" checked /> Dynamic speed<button type="button" class="glide-btn active" id="dynGlideBtn">glide</button></label>
       <div class="thresh">
         <div class="field"><span>spd lo</span><input type="number" id="dynSpdLoInput" step="0.1" /></div>
         <div class="field"><span>spd hi</span><input type="number" id="dynSpdHiInput" step="1" /></div>
         <div class="field"><span>dec lo</span><input type="number" id="dynDecLoInput" step="1" /></div>
         <div class="field"><span>dec hi</span><input type="number" id="dynDecHiInput" step="1" /></div>
         <div class="break"></div>
-        <label class="glide-tog"><input type="checkbox" id="dynGlideCheck" checked />glide</label>
         <div class="field"><span>atk ms</span><input type="number" id="spdAtkInput" step="50" /></div>
         <div class="field"><span>rel ms</span><input type="number" id="spdRelInput" step="50" /></div>
       </div>
@@ -425,13 +426,6 @@
   const inertiaCheck = document.getElementById("inertiaCheck");
   const dynSpeedCheck = document.getElementById("dynSpeedCheck");
   const leadCompCheck = document.getElementById("leadCompCheck");
-  // Per-guard (and dynamic-speed) glide on/off toggles.
-  const accGlideCheck = document.getElementById("accGlideCheck");
-  const sjerkGlideCheck = document.getElementById("sjerkGlideCheck");
-  const ajerkGlideCheck = document.getElementById("ajerkGlideCheck");
-  const decelGlideCheck = document.getElementById("decelGlideCheck");
-  const angAccGlideCheck = document.getElementById("angAccGlideCheck");
-  const dynGlideCheck = document.getElementById("dynGlideCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
   // Orientation mode (see the segmented toggle below): "Predicted" extrapolates
@@ -472,12 +466,24 @@
   inertiaCheck.addEventListener("change", () => { inertia = inertiaCheck.checked; });
   dynSpeedCheck.addEventListener("change", () => { dynSpeed = dynSpeedCheck.checked; });
   leadCompCheck.addEventListener("change", () => { leadComp = leadCompCheck.checked; });
-  accGlideCheck.addEventListener("change", () => { accGlide = accGlideCheck.checked; });
-  sjerkGlideCheck.addEventListener("change", () => { sjerkGlide = sjerkGlideCheck.checked; });
-  ajerkGlideCheck.addEventListener("change", () => { ajerkGlide = ajerkGlideCheck.checked; });
-  decelGlideCheck.addEventListener("change", () => { decelGlide = decelGlideCheck.checked; });
-  angAccGlideCheck.addEventListener("change", () => { angAccGlide = angAccGlideCheck.checked; });
-  dynGlideCheck.addEventListener("change", () => { dynGlide = dynGlideCheck.checked; });
+  // Glide pill toggles (one per guard + dynamic speed): flip the .active class
+  // and the backing flag on click. Seeded active in the markup (all default on).
+  function bindGlideBtn(id, set) {
+    const btn = document.getElementById(id);
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // don't let the click toggle the parent label's checkbox
+      const on = !btn.classList.contains("active");
+      btn.classList.toggle("active", on);
+      set(on);
+    });
+  }
+  bindGlideBtn("accGlideBtn", (v) => { accGlide = v; });
+  bindGlideBtn("sjerkGlideBtn", (v) => { sjerkGlide = v; });
+  bindGlideBtn("ajerkGlideBtn", (v) => { ajerkGlide = v; });
+  bindGlideBtn("decelGlideBtn", (v) => { decelGlide = v; });
+  bindGlideBtn("angAccGlideBtn", (v) => { angAccGlide = v; });
+  bindGlideBtn("dynGlideBtn", (v) => { dynGlide = v; });
 
   // Orientation mode: segmented "Raw Sensor" / "Predicted" toggle. In Raw
   // Sensor mode the prediction is off and every prediction-related option is
