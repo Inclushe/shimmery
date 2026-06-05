@@ -206,7 +206,7 @@
   }
   #fixLink.hidden { display: none; }
 
-  /* Debug overlay (top-left), toggled by the Debug checkbox — three-column grid */
+  /* Debug overlay (top-left), toggled by the Debug checkbox — two-column grid */
   #debug {
     position: fixed;
     top: calc(env(safe-area-inset-top, 0px) + 16px);
@@ -222,7 +222,7 @@
     color: #d8dde8;
     pointer-events: none; /* never intercept taps meant for the canvas */
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    column-count: 3; column-gap: 10px;
+    column-count: 2; column-gap: 14px;
   }
   #debug.hidden { display: none; }
   #debug h3 {
@@ -243,6 +243,10 @@
   }
   .dbg-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,90,90,.7); }
   .dbg-val { width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+  /* Compact rows: several mini bars in one row (xyz), or a plain text value (fps) */
+  .dbg-multi { display: flex; flex: 1; gap: 4px; min-width: 0; }
+  .dbg-multi .dbg-track { flex: 1; }
+  .dbg-text { flex: 1; text-align: left; white-space: nowrap; color: rgba(255,255,255,.75); font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -906,15 +910,11 @@
     { label: "damp",    get: () => dbg.damp,      min: 0, max: 1, fmt: (v) => v.toFixed(2) },
     { label: "ang vel", get: () => angSpeed,      min: 0, max: 6, fmt: (v) => v.toFixed(2) },
     { label: "predAng", get: () => dbg.predAngle, min: -MAX_LEAD_ANGLE, max: MAX_LEAD_ANGLE, bip: true, fmt: (v) => v.toFixed(3) },
-    { label: "meas x",  get: () => measVec[0],    min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
-    { label: "meas y",  get: () => measVec[1],    min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
-    { label: "meas z",  get: () => measVec[2],    min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
-    { label: "pred x",  get: () => cur[0],        min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
-    { label: "pred y",  get: () => cur[1],        min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
-    { label: "pred z",  get: () => cur[2],        min: -1, max: 1, bip: true, fmt: (v) => v.toFixed(2) },
-    { label: "fps",     get: () => dbg.fps,       min: 0, max: 120, fmt: (v) => v.toFixed(0) },
-    { label: "ori fps", get: () => dbg.oriHz,     min: 0, max: 120, fmt: (v) => v.toFixed(0) },
-    { label: "mot fps", get: () => dbg.motHz,     min: 0, max: 120, fmt: (v) => v.toFixed(0) },
+    // Compact: x/y/z as three mini bipolar bars in one row, no per-axis text/value.
+    { label: "meas",    multi: () => measVec,     min: -1, max: 1, bip: true },
+    { label: "pred",    multi: () => cur,         min: -1, max: 1, bip: true },
+    // Compact: frame / orientation / motion sample rates as one text row.
+    { label: "fps",     text: () => "f" + dbg.fps.toFixed(0) + " o" + dbg.oriHz.toFixed(0) + " m" + dbg.motHz.toFixed(0) },
   ];
 
   // A tick's background: a solid line, or a dashed one for the orange LOW
@@ -939,6 +939,36 @@
       const label = document.createElement("span");
       label.className = "dbg-label";
       label.textContent = m.label;
+      row.appendChild(label);
+
+      // Text row: label + a single plain-text value, no bar (e.g. the fps trio).
+      if (m.text) {
+        const val = document.createElement("span");
+        val.className = "dbg-text";
+        row.appendChild(val);
+        debugPanel.appendChild(row);
+        m._text = val;
+        continue;
+      }
+
+      // Multi row: several mini bars sharing one row, no value (e.g. meas/pred xyz).
+      if (m.multi) {
+        const group = document.createElement("div");
+        group.className = "dbg-multi";
+        m._fills = [];
+        for (let i = 0; i < m.multi().length; i++) {
+          const t = document.createElement("div");
+          t.className = "dbg-track" + (m.bip ? " bip" : "");
+          const f = document.createElement("div");
+          f.className = "dbg-fill";
+          t.appendChild(f);
+          group.appendChild(t);
+          m._fills.push(f);
+        }
+        row.appendChild(group);
+        debugPanel.appendChild(row);
+        continue;
+      }
 
       const track = document.createElement("div");
       track.className = "dbg-track" + (m.bip ? " bip" : "");
@@ -959,7 +989,6 @@
       const val = document.createElement("span");
       val.className = "dbg-val";
 
-      row.appendChild(label);
       row.appendChild(track);
       row.appendChild(val);
       debugPanel.appendChild(row);
@@ -969,20 +998,30 @@
   }
 
   // Map each metric to a bar width/position and refresh its number.
+  // Position a fill within its track for a value in [min,max], bipolar or not.
+  function setFill(fill, value, min, max, bip) {
+    let pct = (value - min) / (max - min);
+    if (pct < 0) pct = 0; else if (pct > 1) pct = 1;
+    if (bip) {
+      if (pct >= 0.5) { fill.style.left = "50%"; fill.style.width = ((pct - 0.5) * 100) + "%"; }
+      else { fill.style.left = (pct * 100) + "%"; fill.style.width = ((0.5 - pct) * 100) + "%"; }
+    } else {
+      fill.style.left = "0";
+      fill.style.width = (pct * 100) + "%";
+    }
+  }
+
   function updateDebug() {
     for (const m of debugMetrics) {
-      const v = m.get();
-      let pct = (v - m.min) / (m.max - m.min);
-      if (pct < 0) pct = 0; else if (pct > 1) pct = 1;
-      const fill = m._fill;
-      if (m.bip) {
-        // Grow out from the 50% center line in either direction.
-        if (pct >= 0.5) { fill.style.left = "50%"; fill.style.width = ((pct - 0.5) * 100) + "%"; }
-        else { fill.style.left = (pct * 100) + "%"; fill.style.width = ((0.5 - pct) * 100) + "%"; }
-      } else {
-        fill.style.left = "0";
-        fill.style.width = (pct * 100) + "%";
+      if (m.text) { m._text.textContent = m.text(); continue; }
+      if (m.multi) {
+        const vals = m.multi();
+        for (let i = 0; i < m._fills.length; i++) setFill(m._fills[i], vals[i], m.min, m.max, m.bip);
+        continue;
       }
+      const v = m.get();
+      const fill = m._fill;
+      setFill(fill, v, m.min, m.max, m.bip);
       // A guarded metric whose guard is off keeps the default fill and gray ticks.
       const enabled = m.enabled ? m.enabled() : true;
       fill.style.background = (m.color && enabled) ? m.color(v) : ((m.warn && m.warn()) ? "#ff5b5b" : "#5b9bff");
