@@ -1260,10 +1260,10 @@
       }
       // Accel gate (overrides Dynamic speed when on): latch speed LOW on a flick
       // onset (angular accel above acc-hi), HIGH at the motion's end (angular
-      // accel back below acc-lo while angular decel exceeds it); hold otherwise.
+      // accel back below acc-lo); hold otherwise.
       if (accelGate) {
         if (angAccel > agAccHiV) agSpeed = agSpdLoV;
-        else if (angAccel < agAccLoV && angDecel > agAccLoV) agSpeed = agSpdHiV;
+        else if (angAccel < agAccLoV) agSpeed = agSpdHiV;
         effSpeed = agSpeed;
       }
       // Glide the effective speed (attack as it rises -> releases tracking) so
