@@ -365,6 +365,9 @@
       </div>
     </div>
     <div class="opt">
+      <label><input type="checkbox" id="leadCompCheck" checked /> Lead compensation (spring lag)</label>
+    </div>
+    <div class="opt">
       <label><input type="checkbox" id="smoothCheck" checked /> Smoothing</label>
       <div class="thresh">
         <div class="field"><span>factor</span><input type="number" id="smoothInput" step="0.05" min="0" max="1" /></div>
@@ -429,6 +432,7 @@
   const leadHoldInput = document.getElementById("leadHoldInput");
   const leadHoldVal = document.getElementById("leadHoldVal");
   const ringCheck = document.getElementById("ringCheck");
+  const leadCompCheck = document.getElementById("leadCompCheck");
   const gatePredCheck = document.getElementById("gatePredCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
@@ -459,6 +463,7 @@
   let leadHoldFracV = 1;   // 0..1: standing-lead fraction. 1 = full Hold (settle to led point);
                            // 0 = Raw (settle to truth + differential injection, lead fades).
   let ring = false;        // settle via a 2nd-order underdamped spring (overshoot/ring) vs first-order ease
+  let leadComp = true;     // pre-pay the spring settle's c/k group delay by extending the lead (spring mode only)
   let gatePredicted = false; // FAST/SLOW gate uses predicted (lead-extrapolated) velocity vs measured
   // Per-guard glide enables (default on).
   let accGlide = true, sjerkGlide = true, ajerkGlide = true,
@@ -479,6 +484,7 @@
     if (!ring) { curVel[0] = curVel[1] = curVel[2] = 0; } // drop stale spring velocity
   });
   gatePredCheck.addEventListener("change", () => { gatePredicted = gatePredCheck.checked; });
+  leadCompCheck.addEventListener("change", () => { leadComp = leadCompCheck.checked; });
   // Glide pill toggles (one per guard + dynamic speed): flip the .active class
   // and the backing flag on click. Seeded active in the markup (all default on).
   function bindGlideBtn(id, set) {
@@ -512,6 +518,7 @@
     { box: angAccelCheck, set: (v) => { angAccelGuard = v; } },
     { box: inertiaCheck, set: (v) => { inertia = v; } },
     { box: ringCheck, set: (v) => { ring = v; } },
+    { box: leadCompCheck, set: (v) => { leadComp = v; } },
     { box: gatePredCheck, set: (v) => { gatePredicted = v; } },
     { box: smoothCheck, set: (v) => { smoothing = v; } },
   ];
@@ -1059,6 +1066,8 @@
       fmt: (v) => v.toFixed(2) },
     { label: "lead ms", get: () => leadTimeV * 1000,
       min: 0, max: 120, enabled: () => inertia, fmt: (v) => v.toFixed(0) },
+    { label: "lag ms",  get: () => (leadComp && inertia) ? 1000 * springLagSec() : 0,
+      min: 0, max: 120, enabled: () => leadComp && inertia && ring, fmt: (v) => v.toFixed(0) },
     { label: "tgtDamp", get: () => dbg.targetDamp, min: 0, max: 1, fmt: (v) => v.toFixed(2) },
     { label: "damp",    get: () => dbg.damp,      min: 0, max: 1, fmt: (v) => v.toFixed(2) },
     { label: "predAng", get: () => dbg.predAngle, min: -MAX_LEAD_ANGLE, max: MAX_LEAD_ANGLE, bip: true, fmt: (v) => v.toFixed(3) },
@@ -1193,6 +1202,14 @@
     }
   }
 
+  // Group delay (seconds) of the Spring settle tracking a ramp: c/k = 2*zeta/sqrt(stiff),
+  // the lag that a 2nd-order spring introduces (same form as the old impl's damp/track).
+  // Only the spring has this lag -- the velocity-coupled follow cancels the equivalent
+  // ramp lag for the first-order ease, so ease is not compensated. 0 unless spring is on.
+  function springLagSec() {
+    return (ring && springStiffV > 0) ? 2 * springZetaV / Math.sqrt(springStiffV) : 0;
+  }
+
   // --- Render loop ------------------------------------------------------
   function frame(ts) {
     const now = ts || performance.now();
@@ -1216,10 +1233,12 @@
     // acceleration term was dropped: a 2nd derivative of low-rate, quantized
     // orientation is noise-dominated — amplified ~1/dt² — and flickered the
     // prediction frame-to-frame.)
-    // The velocity-coupled settle paces `cur` by the motion's own velocity, so
-    // there's no spring lag to pre-pay: the lead is just the velocity-scaled
-    // angle over the user's lead time.
+    // Lead = the velocity-scaled angle over the user's lead time. With Spring
+    // settle on, the 2nd-order spring lags its target by c/k seconds, eating into
+    // the lead; if Lead compensation is on, pre-pay that lag by extending the lead
+    // so the displayed result lands the full lead ahead (same idea as the old impl).
     let lead = leadTimeV;
+    if (leadComp && inertia) lead += springLagSec();
     let predAngle = angSpeed * lead;
     if (predAngle > MAX_LEAD_ANGLE) predAngle = MAX_LEAD_ANGLE;
     else if (predAngle < -MAX_LEAD_ANGLE) predAngle = -MAX_LEAD_ANGLE;
