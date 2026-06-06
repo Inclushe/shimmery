@@ -349,6 +349,9 @@
       </div>
     </div>
     <div class="opt">
+      <label><input type="checkbox" id="gatePredCheck" /> Gate on predicted velocity</label>
+    </div>
+    <div class="opt">
       <label><input type="checkbox" id="leadHoldCheck" checked /> Hold lead (settle to led point)</label>
     </div>
     <div class="opt">
@@ -422,6 +425,7 @@
   const inertiaCheck = document.getElementById("inertiaCheck");
   const leadHoldCheck = document.getElementById("leadHoldCheck");
   const ringCheck = document.getElementById("ringCheck");
+  const gatePredCheck = document.getElementById("gatePredCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
   // Orientation mode (see the segmented toggle below): "Predicted" extrapolates
@@ -450,6 +454,7 @@
   let inertia = true;      // inertial settle: cur coasts to rest, weak anchor to truth
   let leadHold = true;     // settle toward the velocity-led point so the lead persists (vs raw truth)
   let ring = false;        // settle via a 2nd-order underdamped spring (overshoot/ring) vs first-order ease
+  let gatePredicted = false; // FAST/SLOW gate uses predicted (lead-extrapolated) velocity vs measured
   // Per-guard glide enables (default on).
   let accGlide = true, sjerkGlide = true, ajerkGlide = true,
       decelGlide = true, angAccGlide = true;
@@ -465,6 +470,7 @@
     ring = ringCheck.checked;
     if (!ring) { curVel[0] = curVel[1] = curVel[2] = 0; } // drop stale spring velocity
   });
+  gatePredCheck.addEventListener("change", () => { gatePredicted = gatePredCheck.checked; });
   // Glide pill toggles (one per guard + dynamic speed): flip the .active class
   // and the backing flag on click. Seeded active in the markup (all default on).
   function bindGlideBtn(id, set) {
@@ -499,6 +505,7 @@
     { box: inertiaCheck, set: (v) => { inertia = v; } },
     { box: leadHoldCheck, set: (v) => { leadHold = v; } },
     { box: ringCheck, set: (v) => { ring = v; } },
+    { box: gatePredCheck, set: (v) => { gatePredicted = v; } },
     { box: smoothCheck, set: (v) => { smoothing = v; } },
   ];
   function setMode(predicted) {
@@ -823,7 +830,8 @@
   // --- ANGULAR / ROTATIONAL motion, derived from DeviceOrientation (NOT the
   // accelerometer): how the orientation vector is turning. ---
   let angSpeed = 0;              // smoothed angular speed (rad/s) of the orientation vector
-  let detVel = 0;               // (re)smoothed angular speed feeding the FAST/SLOW peak-detector
+  let detVel = 0;               // (re)smoothed measured angular speed for the FAST/SLOW peak-detector
+  let detVelPred = 0;           // predicted angular speed (lead-extrapolated) for the gate, when enabled
   let velPeak = 0;              // running peak of detVel since the last re-arm
   let velValley = 0;            // running valley of detVel since entering SLOW
   let settleFast = false;       // peak-detector state: true = FAST (track), false = SLOW (coast)
@@ -898,22 +906,6 @@
         const instSpeed = angle / dt;
         const prevSpeed = angSpeed;
         angSpeed += (instSpeed - angSpeed) * VEL_SMOOTH;
-        // Detector velocity: a (re)smoothed copy of angSpeed feeding the FAST/SLOW
-        // peak-detector. vsmooth = 1.0 makes it follow angSpeed raw (for A/B);
-        // lower smooths shake reversals (speed dips to ~0 each cycle).
-        detVel += (angSpeed - detVel) * (debugOn ? velSmoothV : VEL_DET_SMOOTH);
-        // Peak/valley state machine: FAST while detVel climbs/holds at its peak;
-        // SLOW once it falls below VEL_DROP of the peak (movement winding down,
-        // latched to rest); re-arm FAST when it rises VEL_RISE above its valley.
-        const dropFrac = debugOn ? velDropV : VEL_DROP;
-        const riseAbs = debugOn ? velRiseV : VEL_RISE;
-        if (settleFast) {
-          if (detVel > velPeak) velPeak = detVel;
-          else if (detVel < velPeak * dropFrac) { settleFast = false; velValley = detVel; }
-        } else {
-          if (detVel < velValley) velValley = detVel;
-          if (detVel > velValley + riseAbs) { settleFast = true; velPeak = detVel; }
-        }
         // Angular deceleration (rad/s^2), rectified to the slowing-down part
         // only and EMA-smoothed; drives the Angular decel guard.
         const decel = Math.max(0, (prevSpeed - angSpeed) / dt);
@@ -922,6 +914,30 @@
         // drives the Angular accel guard (damp the prediction at rotation onset).
         const angAcc = Math.max(0, (angSpeed - prevSpeed) / dt);
         angAccel += (angAcc - angAccel) * (debugOn ? angAccSmoothV : ANGACC_SMOOTH);
+        // Detector velocities feeding the FAST/SLOW peak-detector. Measured: a
+        // (re)smoothed copy of angSpeed (vsmooth = 1.0 follows it raw, for A/B;
+        // lower smooths shake reversals). Predicted: angSpeed extrapolated forward
+        // by the lead time using the smoothed signed angular accel, so the gate can
+        // anticipate a wind-down ~leadTime early. The gate uses one or the other
+        // per the "Gate on predicted velocity" toggle; both are shown as debug bars.
+        const detSmooth = debugOn ? velSmoothV : VEL_DET_SMOOTH;
+        detVel += (angSpeed - detVel) * detSmooth;
+        let predSpeed = angSpeed + (angAccel - angDecel) * leadTimeV;
+        if (predSpeed < 0) predSpeed = 0; // speed magnitude can't go negative
+        detVelPred += (predSpeed - detVelPred) * detSmooth;
+        const gateVel = gatePredicted ? detVelPred : detVel;
+        // Peak/valley state machine: FAST while gateVel climbs/holds at its peak;
+        // SLOW once it falls below VEL_DROP of the peak (movement winding down,
+        // latched to rest); re-arm FAST when it rises VEL_RISE above its valley.
+        const dropFrac = debugOn ? velDropV : VEL_DROP;
+        const riseAbs = debugOn ? velRiseV : VEL_RISE;
+        if (settleFast) {
+          if (gateVel > velPeak) velPeak = gateVel;
+          else if (gateVel < velPeak * dropFrac) { settleFast = false; velValley = gateVel; }
+        } else {
+          if (gateVel < velValley) velValley = gateVel;
+          if (gateVel > velValley + riseAbs) { settleFast = true; velPeak = gateVel; }
+        }
         if (al > 1e-6) angAxis = [ax / al, ay / al, az / al];
         dbg.oriHz += (1 / dt - dbg.oriHz) * 0.1; // DeviceOrientation sample rate (debug)
       }
@@ -970,7 +986,7 @@
 
   // --- Debug overlay ----------------------------------------------------
   // Values computed inside frame() that the overlay needs to read back.
-  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, sJerkDamp: 1, aJerkDamp: 1, decelDamp: 1, drive: 1, vel: 0, peak: 0, predAngle: 0, fps: 0, oriHz: 0, motHz: 0 };
+  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, sJerkDamp: 1, aJerkDamp: 1, decelDamp: 1, drive: 1, vel: 0, velPred: 0, peak: 0, predAngle: 0, fps: 0, oriHz: 0, motHz: 0 };
 
   // Each metric: a live accessor, a bar range, and a formatter. `bip` draws a
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
@@ -1000,7 +1016,14 @@
       color: (v) => v >= decelHighV ? "#ff5b5b" : (v >= decelLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     { label: "drive",   get: () => dbg.drive,     min: 0, max: 1, enabled: () => inertia, fmt: (v) => v.toFixed(2) },
-    { label: "vel",     get: () => dbg.vel,       min: 0, max: 6, enabled: () => inertia,
+    { label: "vel m",   get: () => dbg.vel,       min: 0, max: 6, enabled: () => inertia,
+      tickEnabled: () => !gatePredicted, // peak/drop ticks ride the active gate signal
+      ticks: [{ at: () => dbg.peak, color: "#5bff9b" },
+              { at: () => dbg.peak * velDropV, color: "#ff9b3b", dashed: true }],
+      color: () => settleFast ? "#5b9bff" : "rgba(255,255,255,0.4)",
+      fmt: (v) => v.toFixed(2) },
+    { label: "vel p",   get: () => dbg.velPred,   min: 0, max: 6, enabled: () => inertia,
+      tickEnabled: () => gatePredicted,
       ticks: [{ at: () => dbg.peak, color: "#5bff9b" },
               { at: () => dbg.peak * velDropV, color: "#ff9b3b", dashed: true }],
       color: () => settleFast ? "#5b9bff" : "rgba(255,255,255,0.4)",
@@ -1155,7 +1178,7 @@
     // velocity so the prediction doesn't keep drifting.
     if (now - prevMeasTime > STALE_MS) {
       angSpeed = 0; angDecel = 0;
-      detVel = 0; velPeak = 0; velValley = 0; settleFast = false; // reset detector to SLOW
+      detVel = 0; detVelPred = 0; velPeak = 0; velValley = 0; settleFast = false; // reset detector to SLOW
       followSpeed = 0; prevLeadAngle = 0; // neutralize the velocity follow + lead
       curVel[0] = curVel[1] = curVel[2] = 0; // and the spring-settle velocity
     }
@@ -1237,10 +1260,11 @@
     // position. The predictive lead rides on top. Once the detector flips SLOW
     // the follow freezes on a dime and only a weak always-on "anchor" moves
     // `cur`, settling it onto truth — killing the end-of-motion ring/drift.
-    let driveDbg = 1, velDbg = 0, peakDbg = 0;
+    let driveDbg = 1, velDbg = 0, velPredDbg = 0, peakDbg = 0;
     if (inertia && prediction) {
       driveDbg = settleFast ? 1 : 0;
       velDbg = detVel;
+      velPredDbg = detVelPred;
       peakDbg = velPeak;
       const leadAngle = predAngle; // velocity-scaled, guard-damped, clamped lead
 
@@ -1334,6 +1358,7 @@
       dbg.decelDamp = decelDamp;
       dbg.drive = driveDbg;
       dbg.vel = velDbg;
+      dbg.velPred = velPredDbg;
       dbg.peak = peakDbg;
       dbg.predAngle = predAngle;
       if (frameDt > 0) dbg.fps += (1 / frameDt - dbg.fps) * 0.1;
