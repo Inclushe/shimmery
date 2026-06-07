@@ -788,6 +788,7 @@
   // normal [0,0,1] under the device's rotation.
   let cur = [0, 0, 1];           // rendered (predicted) vector
   let curVel = [0, 0, 0];        // `cur` velocity, integrated by the settle spring (gives overshoot/coast)
+  let wasFast = false;           // previous-frame gate state, to detect the FAST->SLOW edge
   let measVec = [0, 0, 1];       // latest measured vector
 
   // Angular-velocity tracking, used to extrapolate `measVec` forward.
@@ -1232,14 +1233,21 @@
 
       if (settleFast) {            // velocity-follow: pace cur by the motion's rate
         cur = rotateAround(cur, angAxis, angSpeed * frameDt);
+      } else if (wasFast) {
+        // Entering SLOW: drop the momentum the strong spring built chasing the
+        // shrinking lead, so it can't coast the dot past truth once the strong
+        // term + its heavy damping switch off. The weak anchor then settles cur
+        // from where it is, with only its own gentle overshoot.
+        curVel[0] = curVel[1] = curVel[2] = 0;
       }
+      wasFast = settleFast;
 
       // Spring settle. FAST: a strong spring pulls cur toward the led `target`
       // (alongside the velocity-follow above) for tight, lead-carrying tracking.
       // SLOW: the strong term is gated OFF, so only the weak `anchor` toward raw
-      // truth is left and cur coasts/settles to rest under it (main's behaviour).
-      // Damping is derived from whichever stiffness is active, so the damping
-      // ratio stays `zeta` in both states. Semi-implicit (symplectic) Euler.
+      // truth is left and cur settles to rest under it (main's behaviour). Damping
+      // is derived from whichever stiffness is active, so the damping ratio stays
+      // `zeta` in both states. Semi-implicit (symplectic) Euler.
       const kStrong = settleFast ? springStiffV : 0; // led-target spring, gated off at SLOW
       const c = 2 * Math.sqrt(kStrong + anchorV) * springZetaV;
       for (let i = 0; i < 3; i++) {
