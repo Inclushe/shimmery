@@ -342,6 +342,7 @@
         <div class="field"><span>stiff</span><input type="number" id="stiffInput" step="100" /></div>
         <div class="field"><span>zeta</span><input type="number" id="zetaInput" step="0.05" /></div>
         <div class="field"><span>anchor</span><input type="number" id="anchorStiffInput" step="0.5" /></div>
+        <div class="field"><span>coast</span><input type="number" id="coastInput" step="0.05" min="0" max="1" /></div>
         <div class="field"><span>drop</span><input type="number" id="dropInput" step="0.05" min="0" max="1" /></div>
         <div class="field"><span>rise</span><input type="number" id="riseInput" step="0.05" /></div>
         <div class="field"><span>vsmooth</span><input type="number" id="vsmoothInput" step="0.05" min="0" max="1" /></div>
@@ -610,6 +611,7 @@
   const SPRING_STIFF = 2500;     // 1/s^2; spring stiffness toward the led target (k)
   const SPRING_ZETA  = 0.7;      // damping ratio; c = 2*sqrt(k)*zeta. < 1 overshoots (Snap = 0.7)
   const ANCHOR_STIFF = 1;        // 1/s^2; weak always-on spring toward raw truth (drift correction)
+  const COAST = 0.25;            // 0..1; fraction of the motion's momentum kept entering SLOW (coast-through)
   // Velocity peak-detector: FAST while the detector velocity climbs/holds at its
   // peak; SLOW once it falls below VEL_DROP of the peak (a movement winding down,
   // latched through to rest); re-arm FAST when it rises VEL_RISE above its valley
@@ -639,6 +641,7 @@
   let leadTimeV = LEAD_MS / 1000,    // seconds; predictive lead time (the `lead ms` field)
       anchorV = ANCHOR_STIFF;        // 1/s^2; weak spring toward raw truth (the `anchor` field)
   let springStiffV = SPRING_STIFF, springZetaV = SPRING_ZETA; // spring knobs (`stiff`/`zeta`)
+  let coastV = COAST;                // momentum kept entering SLOW (the `coast` field)
   let velDropV = VEL_DROP, velRiseV = VEL_RISE, velSmoothV = VEL_DET_SMOOTH;
   let accSmoothV = ACC_SMOOTH;       // EMA factor for accel magnitude (debug-editable)
   let sjerkSmoothV = JERK_SMOOTH;    // EMA factor for signed jerk
@@ -692,6 +695,7 @@
   bindThreshold("stiffInput", SPRING_STIFF, (v) => { springStiffV = v; });
   bindThreshold("zetaInput", SPRING_ZETA, (v) => { springZetaV = v; });
   bindThreshold("anchorStiffInput", ANCHOR_STIFF, (v) => { anchorV = v; });
+  bindThreshold("coastInput", COAST, (v) => { coastV = v; });
   bindThreshold("dropInput", VEL_DROP, (v) => { velDropV = v; });
   bindThreshold("riseInput", VEL_RISE, (v) => { velRiseV = v; });
   bindThreshold("vsmoothInput", VEL_DET_SMOOTH, (v) => { velSmoothV = v; });
@@ -1234,11 +1238,11 @@
       if (settleFast) {            // velocity-follow: pace cur by the motion's rate
         cur = rotateAround(cur, angAxis, angSpeed * frameDt);
       } else if (wasFast) {
-        // Entering SLOW: drop the momentum the strong spring built chasing the
-        // shrinking lead, so it can't coast the dot past truth once the strong
-        // term + its heavy damping switch off. The weak anchor then settles cur
-        // from where it is, with only its own gentle overshoot.
-        curVel[0] = curVel[1] = curVel[2] = 0;
+        // Entering SLOW: shed most of the momentum the strong spring built chasing
+        // the shrinking lead (so it can't fling the dot far past truth), but keep
+        // a little (`coast`) so the dot glides gently through before the weak
+        // anchor settles it onto truth.
+        curVel[0] *= coastV; curVel[1] *= coastV; curVel[2] *= coastV;
       }
       wasFast = settleFast;
 
