@@ -343,6 +343,7 @@
         <div class="field"><span>zeta</span><input type="number" id="zetaInput" step="0.05" /></div>
         <div class="field"><span>anchor</span><input type="number" id="anchorStiffInput" step="0.5" /></div>
         <div class="field"><span>coast</span><input type="number" id="coastInput" step="0.05" min="0" max="1" /></div>
+        <div class="field"><span>ease ms</span><input type="number" id="easeInput" step="10" min="0" /></div>
         <div class="field"><span>drop</span><input type="number" id="dropInput" step="0.05" min="0" max="1" /></div>
         <div class="field"><span>rise</span><input type="number" id="riseInput" step="0.05" /></div>
         <div class="field"><span>vsmooth</span><input type="number" id="vsmoothInput" step="0.05" min="0" max="1" /></div>
@@ -612,6 +613,7 @@
   const SPRING_ZETA  = 0.7;      // damping ratio; c = 2*sqrt(k)*zeta. < 1 overshoots (Snap = 0.7)
   const ANCHOR_STIFF = 1;        // 1/s^2; weak always-on spring toward raw truth (drift correction)
   const COAST = 0.25;            // 0..1; fraction of the motion's momentum kept entering SLOW (coast-through)
+  const LEAD_EASE_MS = 120;      // ms; how long the spring's lead eases in (vs snapping ahead at onset)
   // Velocity peak-detector: FAST while the detector velocity climbs/holds at its
   // peak; SLOW once it falls below VEL_DROP of the peak (a movement winding down,
   // latched through to rest); re-arm FAST when it rises VEL_RISE above its valley
@@ -642,6 +644,7 @@
       anchorV = ANCHOR_STIFF;        // 1/s^2; weak spring toward raw truth (the `anchor` field)
   let springStiffV = SPRING_STIFF, springZetaV = SPRING_ZETA; // spring knobs (`stiff`/`zeta`)
   let coastV = COAST;                // momentum kept entering SLOW (the `coast` field)
+  let leadEaseV = LEAD_EASE_MS;      // ms; lead ease-in time constant (the `ease` field)
   let velDropV = VEL_DROP, velRiseV = VEL_RISE, velSmoothV = VEL_DET_SMOOTH;
   let accSmoothV = ACC_SMOOTH;       // EMA factor for accel magnitude (debug-editable)
   let sjerkSmoothV = JERK_SMOOTH;    // EMA factor for signed jerk
@@ -696,6 +699,7 @@
   bindThreshold("zetaInput", SPRING_ZETA, (v) => { springZetaV = v; });
   bindThreshold("anchorStiffInput", ANCHOR_STIFF, (v) => { anchorV = v; });
   bindThreshold("coastInput", COAST, (v) => { coastV = v; });
+  bindThreshold("easeInput", LEAD_EASE_MS, (v) => { leadEaseV = v; });
   bindThreshold("dropInput", VEL_DROP, (v) => { velDropV = v; });
   bindThreshold("riseInput", VEL_RISE, (v) => { velRiseV = v; });
   bindThreshold("vsmoothInput", VEL_DET_SMOOTH, (v) => { velSmoothV = v; });
@@ -793,6 +797,7 @@
   let cur = [0, 0, 1];           // rendered (predicted) vector
   let curVel = [0, 0, 0];        // `cur` velocity, integrated by the settle spring (gives overshoot/coast)
   let wasFast = false;           // previous-frame gate state, to detect the FAST->SLOW edge
+  let leadSmoothed = 0;          // eased lead angle (rad) feeding the spring target, ramps to predAngle
   let measVec = [0, 0, 1];       // latest measured vector
 
   // Angular-velocity tracking, used to extrapolate `measVec` forward.
@@ -1146,6 +1151,7 @@
       angSpeed = 0; angDecel = 0;
       detVel = 0; velPeak = 0; velValley = 0; settleFast = false; // reset detector to SLOW
       curVel[0] = curVel[1] = curVel[2] = 0; // and the spring-settle velocity
+      leadSmoothed = 0;                      // and the eased lead
     }
 
     // Predict the orientation LEAD_MS ahead from angular velocity. (An
@@ -1221,6 +1227,15 @@
     // Target the prediction when on; otherwise the raw reading (pre-update).
     const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
 
+    // Velocity-coupled spring target: ease the lead in (toward predAngle) over
+    // `ease` ms instead of applying it instantly, so the strong spring rides the
+    // motion and eases the dot ahead rather than snapping it onto the absolute
+    // predicted position when a movement starts. At steady speed leadSmoothed ==
+    // predAngle (the full lead) -- only the onset/transient is eased.
+    const easeK = leadEaseV > 0 ? 1 - Math.exp(-frameDt / (leadEaseV / 1000)) : 1;
+    leadSmoothed += (predAngle - leadSmoothed) * easeK;
+    const springTarget = prediction ? rotateAround(measVec, angAxis, leadSmoothed) : measVec;
+
     // Inertial settle (velocity-coupled spring): while a movement builds/holds
     // (FAST) `cur` is PACED by the motion's angular velocity (rotated by
     // angSpeed*dt) so it tracks the rotation rate with no spring lag. On top of
@@ -1246,16 +1261,17 @@
       }
       wasFast = settleFast;
 
-      // Spring settle. FAST: a strong spring pulls cur toward the led `target`
-      // (alongside the velocity-follow above) for tight, lead-carrying tracking.
-      // SLOW: the strong term is gated OFF, so only the weak `anchor` toward raw
-      // truth is left and cur settles to rest under it (main's behaviour). Damping
-      // is derived from whichever stiffness is active, so the damping ratio stays
-      // `zeta` in both states. Semi-implicit (symplectic) Euler.
+      // Spring settle. FAST: a strong spring pulls cur toward the eased led
+      // `springTarget` (alongside the velocity-follow above) for tight, springy,
+      // lead-carrying tracking -- the eased lead means it rides into the lead
+      // instead of snapping to it. SLOW: the strong term is gated OFF, so only the
+      // weak `anchor` toward raw truth is left and cur settles to rest under it
+      // (main's behaviour). Damping is derived from whichever stiffness is active,
+      // so the damping ratio stays `zeta` in both states. Semi-implicit Euler.
       const kStrong = settleFast ? springStiffV : 0; // led-target spring, gated off at SLOW
       const c = 2 * Math.sqrt(kStrong + anchorV) * springZetaV;
       for (let i = 0; i < 3; i++) {
-        const accel = kStrong * (target[i] - cur[i])
+        const accel = kStrong * (springTarget[i] - cur[i])
                     + anchorV * (measVec[i] - cur[i])
                     - c * curVel[i];
         curVel[i] += accel * frameDt;
