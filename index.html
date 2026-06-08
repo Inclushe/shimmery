@@ -793,6 +793,8 @@
   let cur = [0, 0, 1];           // rendered (predicted) vector
   let curVel = [0, 0, 0];        // `cur` velocity, integrated by the settle spring (gives overshoot/coast)
   let wasFast = false;           // previous-frame gate state, to detect the FAST->SLOW edge
+  let refPos = null;             // 2nd-order reference model: smoothed (velocity-continuous) setpoint
+  let refVel = [0, 0, 0];        // that the settle spring chases instead of the step-prone raw target
   let measVec = [0, 0, 1];       // latest measured vector
 
   // Angular-velocity tracking, used to extrapolate `measVec` forward.
@@ -1146,6 +1148,7 @@
       angSpeed = 0; angDecel = 0;
       detVel = 0; velPeak = 0; velValley = 0; settleFast = false; // reset detector to SLOW
       curVel[0] = curVel[1] = curVel[2] = 0; // and the spring-settle velocity
+      refPos = null; refVel[0] = refVel[1] = refVel[2] = 0; // and the reference model
     }
 
     // Predict the orientation LEAD_MS ahead from angular velocity. (An
@@ -1246,16 +1249,30 @@
       }
       wasFast = settleFast;
 
-      // Spring settle. FAST: a strong spring pulls cur toward the led `target`
-      // (alongside the velocity-follow above) for tight, lead-carrying tracking.
+      // Spring settle. FAST: a strong spring pulls cur toward the prefiltered
+      // reference `refPos` (alongside the velocity-follow above) for tight,
+      // lead-carrying tracking without an onset slam (the reference never steps).
       // SLOW: the strong term is gated OFF, so only the weak `anchor` toward raw
       // truth is left and cur settles to rest under it (main's behaviour). Damping
       // is derived from whichever stiffness is active, so the damping ratio stays
       // `zeta` in both states. Semi-implicit (symplectic) Euler.
-      const kStrong = settleFast ? springStiffV : 0; // led-target spring, gated off at SLOW
+      // Reference prefilter: run the raw led `target` through its OWN critically-
+      // damped 2nd-order filter so the setpoint the spring chases can never STEP --
+      // it accelerates up to the motion smoothly (velocity-continuous). With no
+      // step to slam, the strong spring stops snapping at the FAST onset yet still
+      // overshoots around the reference. REF_BW (rad/s) trades snap vs. lag.
+      const REF_BW = 14;
+      if (refPos === null) refPos = target.slice();
+      for (let i = 0; i < 3; i++) {
+        const ra = REF_BW * REF_BW * (target[i] - refPos[i]) - 2 * REF_BW * refVel[i];
+        refVel[i] += ra * frameDt;
+        refPos[i] += refVel[i] * frameDt;
+      }
+
+      const kStrong = settleFast ? springStiffV : 0; // spring toward the reference, gated off at SLOW
       const c = 2 * Math.sqrt(kStrong + anchorV) * springZetaV;
       for (let i = 0; i < 3; i++) {
-        const accel = kStrong * (target[i] - cur[i])
+        const accel = kStrong * (refPos[i] - cur[i])
                     + anchorV * (measVec[i] - cur[i])
                     - c * curVel[i];
         curVel[i] += accel * frameDt;
