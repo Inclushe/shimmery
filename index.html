@@ -608,7 +608,13 @@
   // inertial settle -- plus a weak anchor toward raw truth to kill drift. The
   // velocity peak-detector (FAST/SLOW) freezes the follow the instant a motion
   // winds down so `cur` settles instead of chasing the ringing reading.
-  const SPRING_STIFF = 2500;     // 1/s^2; spring stiffness toward the led target (k)
+  // Feedforward + soft spring: the velocity-follow above is feedforward -- it
+  // already supplies the pacing rate, so the spring's stiffness no longer has to.
+  // A soft k only GENTLY closes the onset position gap (glides in over ~0.1-0.2s
+  // with overshoot instead of slamming in ~30ms), so FAST no longer snaps to the
+  // target. The larger group delay c/k = 2*zeta/sqrt(k) is auto-paid by the
+  // springLagSec() lead-comp, so the lead doesn't sag.
+  const SPRING_STIFF = 350;      // 1/s^2; spring stiffness toward the led target (k)
   const SPRING_ZETA  = 0.7;      // damping ratio; c = 2*sqrt(k)*zeta. < 1 overshoots (Snap = 0.7)
   const ANCHOR_STIFF = 1;        // 1/s^2; weak always-on spring toward raw truth (drift correction)
   const COAST = 0.25;            // 0..1; fraction of the motion's momentum kept entering SLOW (coast-through)
@@ -707,7 +713,7 @@
   const settlePresets = {
     soft: { stiffInput: 1000, zetaInput: 1.1, anchorStiffInput: ANCHOR_STIFF },
     calm: { stiffInput: 1600, zetaInput: 1.0, anchorStiffInput: ANCHOR_STIFF },
-    snap: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF },
+    snap: { stiffInput: 350, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF },
   };
   const presetBtns = document.querySelectorAll(".presets button[data-preset]");
   const settleInputIds = ["stiffInput", "zetaInput", "anchorStiffInput"];
@@ -1235,8 +1241,8 @@
       velDbg = detVel;
       peakDbg = velPeak;
 
-      if (settleFast) {            // velocity-follow: pace cur by the motion's rate
-        cur = rotateAround(cur, angAxis, angSpeed * frameDt);
+      if (settleFast) {            // velocity-follow = feedforward: pace cur by the
+        cur = rotateAround(cur, angAxis, angSpeed * frameDt); // motion's rate
       } else if (wasFast) {
         // Entering SLOW: shed most of the momentum the strong spring built chasing
         // the shrinking lead (so it can't fling the dot far past truth), but keep
@@ -1246,9 +1252,11 @@
       }
       wasFast = settleFast;
 
-      // Spring settle. FAST: a strong spring pulls cur toward the led `target`
-      // (alongside the velocity-follow above) for tight, lead-carrying tracking.
-      // SLOW: the strong term is gated OFF, so only the weak `anchor` toward raw
+      // Spring settle. FAST: a SOFT spring pulls cur toward the led `target`
+      // (alongside the feedforward velocity-follow above). Because the follow
+      // already carries the pacing rate, the spring only gently closes residual
+      // position error with overshoot -- no stiff yank to the target, no snap.
+      // SLOW: the spring term is gated OFF, so only the weak `anchor` toward raw
       // truth is left and cur settles to rest under it (main's behaviour). Damping
       // is derived from whichever stiffness is active, so the damping ratio stays
       // `zeta` in both states. Semi-implicit (symplectic) Euler.
