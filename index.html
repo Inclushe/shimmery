@@ -86,6 +86,8 @@
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   }
   #toggles input[type="checkbox"] { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; }
+  /* Always-on fps readout pinned to the trailing edge of the Debug label. */
+  .fps-tag { margin-left: auto; font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.55); font-variant-numeric: tabular-nums; }
   #densityRow, #sizeRow { gap: 10px; }
   #densityRow input[type="range"], #sizeRow input[type="range"] { width: 110px; accent-color: #fff; cursor: pointer; }
 
@@ -394,7 +396,7 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="debugCheck" /> Debug</label>
+      <label><input type="checkbox" id="debugCheck" /> Debug<span id="fpsTag" class="fps-tag">– fps</span></label>
     </div>
     </div>
 
@@ -557,6 +559,8 @@
   // drive the effect (accel magnitude, damping, angular velocity, vectors).
   const debugCheck = document.getElementById("debugCheck");
   const debugPanel = document.getElementById("debug");
+  const fpsTag = document.getElementById("fpsTag"); // always-on fps readout in the Debug label
+  let lastFpsShown = 0;                             // throttle the fps label updates (ms)
   let debugOn = false;
   debugCheck.addEventListener("change", () => {
     debugOn = debugCheck.checked;
@@ -1195,9 +1199,17 @@
     // Clamp dt so a frame-rate hitch can't push the explicit integrators past
     // their stability bound (damp < 2/dt). At <=45fps-equiv we just advance a
     // bit less than real time for that frame — imperceptible, keeps tuning safe.
-    let frameDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
+    const realDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
+    let frameDt = realDt;
     if (frameDt > 1 / 45) frameDt = 1 / 45;
     lastFrameTime = now;
+    // Always-on fps (from the unclamped delta, so it can read below 45). Smoothed,
+    // shown in the Debug label; throttled so it isn't relaid out every frame.
+    if (realDt > 0) dbg.fps += (1 / realDt - dbg.fps) * 0.1;
+    if (now - lastFpsShown > 250) {
+      fpsTag.textContent = dbg.fps.toFixed(0) + " fps";
+      lastFpsShown = now;
+    }
 
     // If readings have stopped arriving (device held still), relax the
     // velocity so the prediction doesn't keep drifting.
@@ -1394,7 +1406,6 @@
       dbg.vel = velDbg;
       dbg.peak = peakDbg;
       dbg.predAngle = predAngle;
-      if (frameDt > 0) dbg.fps += (1 / frameDt - dbg.fps) * 0.1;
       updateDebug();
     }
 
