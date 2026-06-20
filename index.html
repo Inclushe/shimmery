@@ -329,7 +329,7 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="decelCheck" checked /> Angular decel guard<button type="button" class="glide-btn active" id="decelGlideBtn">glide</button></label>
+      <label><input type="checkbox" id="decelCheck" /> Angular decel guard<button type="button" class="glide-btn active" id="decelGlideBtn">glide</button></label>
       <div class="thresh guard">
         <div class="field"><span>low</span><input type="number" id="decelLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="decelHighInput" step="1" /></div>
@@ -340,9 +340,9 @@
     </div>
     <div class="opt" id="settleOpt">
       <div id="settleToggle" class="seg" role="group" aria-label="Inertial settle algorithm">
-        <button type="button" class="seg-opt" data-settle="original">Original</button>
+        <button type="button" class="seg-opt active" data-settle="original">Original</button>
         <button type="button" class="seg-opt" data-settle="main">Main</button>
-        <button type="button" class="seg-opt active" data-settle="comoving">Co-moving</button>
+        <button type="button" class="seg-opt" data-settle="comoving">Co-moving</button>
       </div>
       <!-- Original = inertial settle off (plain predicted easing); it has no options. -->
       <!-- Main: the main-branch speed-gated spring (its own variables). -->
@@ -469,10 +469,10 @@
   let accelGuard = true;
   let signedJerkGuard = false;
   let absJerkGuard = true;
-  let decelGuard = true;   // idea 1: damp prediction during abrupt deceleration
+  let decelGuard = false;   // idea 1: damp prediction during abrupt deceleration
   let angAccelGuard = false; // damp prediction during abrupt rotation onset (off: it opposes snappy onset)
   let inertia = true;      // settle active (false only for the "Original" algorithm); derived from settleMode
-  let settleMode = "comoving"; // which inertial settle algorithm: "original" | "main" | "comoving"
+  let settleMode = "original"; // which inertial settle algorithm: "original" | "main" | "comoving"
   let leadComp = true;     // pre-pay the spring's c/k group delay by extending the lead (borrowed from main)
   // Per-guard glide enables (default on).
   let accGlide = true, sjerkGlide = true, ajerkGlide = true,
