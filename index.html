@@ -76,7 +76,7 @@
     border-radius: 999px;
     background: rgba(20,22,30,0.6);
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    color: #fff; font-size: 13px; font-weight: 600; letter-spacing: 0.2px;
+    color: #fff; font-size: 12px; font-weight: 600; letter-spacing: 0.2px;
     cursor: pointer;
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   }
@@ -114,7 +114,7 @@
   }
   #modeToggle .seg-opt.active { background: #fff; color: #14161e; }
 
-  /* Per-guard threshold editors, revealed only in debug mode */
+  /* Per-limiter threshold editors, revealed only in debug mode */
   .thresh { display: none; gap: 8px; margin: 0 0 0 14px; align-items: flex-start; flex-wrap: wrap; }
   body.debug .thresh { display: flex; }
   .thresh .field { display: flex; flex-direction: column; gap: 2px; }
@@ -129,9 +129,9 @@
     background: rgba(20,22,30,0.6); color: #fff;
     font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
-  .thresh.guard input[type="number"] { width: 5ch; }
+  .thresh.limiter input[type="number"] { width: 5ch; }
   .thresh .break { flex-basis: 100%; height: 0; }
-  /* Glide on/off, a pill toggle living at the right of a guard's main label.
+  /* Glide on/off, a pill toggle living at the right of a limiter's main label.
      Styled like the inertial-settle presets; revealed only in debug mode. */
   .glide-btn {
     display: none; margin-left: auto;
@@ -286,8 +286,8 @@
       <button type="button" class="seg-opt active" data-mode="predicted">Predicted</button>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="accelCheck" checked /> Linear accel guard<button type="button" class="glide-btn active" id="accGlideBtn">glide</button></label>
-      <div class="thresh guard">
+      <label><input type="checkbox" id="accelCheck" checked /> Linear accel limiter<button type="button" class="glide-btn active" id="accGlideBtn">glide</button></label>
+      <div class="thresh limiter">
         <div class="field"><span>low</span><input type="number" id="accLowInput" step="0.5" /></div>
         <div class="field"><span>high</span><input type="number" id="accHighInput" step="0.5" /></div>
         <div class="field"><span>smooth</span><input type="number" id="accSmoothInput" step="0.05" min="0" max="1" /></div>
@@ -296,8 +296,8 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="sjerkCheck" /> Jerk guard<button type="button" class="glide-btn active" id="sjerkGlideBtn">glide</button></label>
-      <div class="thresh guard">
+      <label><input type="checkbox" id="sjerkCheck" /> Jerk limiter<button type="button" class="glide-btn active" id="sjerkGlideBtn">glide</button></label>
+      <div class="thresh limiter">
         <div class="field"><span>low</span><input type="number" id="sjerkLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
         <div class="field"><span>smooth</span><input type="number" id="sjerkSmoothInput" step="0.05" min="0" max="1" /></div>
@@ -306,8 +306,8 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="ajerkCheck" checked /> Absolute jerk guard<button type="button" class="glide-btn active" id="ajerkGlideBtn">glide</button></label>
-      <div class="thresh guard">
+      <label><input type="checkbox" id="ajerkCheck" checked /> Absolute jerk limiter<button type="button" class="glide-btn active" id="ajerkGlideBtn">glide</button></label>
+      <div class="thresh limiter">
         <div class="field"><span>low</span><input type="number" id="ajerkLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="ajerkHighInput" step="1" /></div>
         <div class="field"><span>smooth</span><input type="number" id="ajerkSmoothInput" step="0.05" min="0" max="1" /></div>
@@ -316,8 +316,8 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="angAccelCheck" /> Angular accel guard<button type="button" class="glide-btn active" id="angAccGlideBtn">glide</button></label>
-      <div class="thresh guard">
+      <label><input type="checkbox" id="angAccelCheck" /> Angular accel limiter<button type="button" class="glide-btn active" id="angAccGlideBtn">glide</button></label>
+      <div class="thresh limiter">
         <div class="field"><span>low</span><input type="number" id="angAccLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="angAccHighInput" step="1" /></div>
         <div class="field"><span>smooth</span><input type="number" id="angAccSmoothInput" step="0.05" min="0" max="1" /></div>
@@ -326,8 +326,8 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="decelCheck" checked /> Angular decel guard<button type="button" class="glide-btn active" id="decelGlideBtn">glide</button></label>
-      <div class="thresh guard">
+      <label><input type="checkbox" id="decelCheck" checked /> Angular decel limiter<button type="button" class="glide-btn active" id="decelGlideBtn">glide</button></label>
+      <div class="thresh limiter">
         <div class="field"><span>low</span><input type="number" id="decelLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="decelHighInput" step="1" /></div>
         <div class="field"><span>smooth</span><input type="number" id="decelSmoothInput" step="0.05" min="0" max="1" /></div>
@@ -424,40 +424,40 @@
   // Orientation mode (see the segmented toggle below): "Predicted" extrapolates
   // the reading forward; "Raw Sensor" uses the reading as-is for an A/B
   // comparison and disables/forces-off every prediction-related option.
-  // NOTE on the guards: "Linear accel"/"Jerk"/"AbsJerk" all key off LINEAR
+  // NOTE on the limiters: "Linear accel"/"Jerk"/"AbsJerk" all key off LINEAR
   // (translational) motion from the DeviceMotion accelerometer; "Angular decel"
   // keys off ROTATIONAL motion from DeviceOrientation. Same word "accel" but two
   // unrelated quantities/sensors.
-  // Linear accel guard: when on, damp the prediction while linear acceleration is
+  // Linear accel limiter: when on, damp the prediction while linear acceleration is
   // high (e.g. shoving the phone) so jitter isn't amplified into flicker.
-  // Signed jerk guard: keyed off |smoothed signed linear jerk| (the original
+  // Signed jerk limiter: keyed off |smoothed signed linear jerk| (the original
   // signal, which dips through zero on a sign change). Off by default.
-  // AbsJerk guard: keyed off the rectify-then-smooth linear-jerk envelope (stays
+  // AbsJerk limiter: keyed off the rectify-then-smooth linear-jerk envelope (stays
   // elevated across a sign change). On by default.
-  // Damp glide (per guard): ease each guard's damping toward its target in both
+  // Damp glide (per limiter): ease each limiter's damping toward its target in both
   // directions (over its own attack/release times) instead of snapping, so a
-  // guard engaging abruptly doesn't slam `damp` and cause its own flicker.
+  // limiter engaging abruptly doesn't slam `damp` and cause its own flicker.
   let smoothing = true;
   let prediction = true;
-  let accelGuard = true;
-  let signedJerkGuard = false;
-  let absJerkGuard = true;
-  let decelGuard = true;   // idea 1: damp prediction during abrupt deceleration
-  let angAccelGuard = false; // damp prediction during abrupt rotation onset (off: it opposes snappy onset)
+  let accelLimiter = true;
+  let signedJerkLimiter = false;
+  let absJerkLimiter = true;
+  let decelLimiter = true;   // idea 1: damp prediction during abrupt deceleration
+  let angAccelLimiter = false; // damp prediction during abrupt rotation onset (off: it opposes snappy onset)
   let inertia = true;      // inertial settle: cur coasts to rest, weak anchor to truth
   let leadComp = true;     // pre-pay the spring's c/k group delay by extending the lead (borrowed from main)
-  // Per-guard glide enables (default on).
+  // Per-limiter glide enables (default on).
   let accGlide = true, sjerkGlide = true, ajerkGlide = true,
       decelGlide = true, angAccGlide = true;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
-  accelCheck.addEventListener("change", () => { accelGuard = accelCheck.checked; });
-  sjerkCheck.addEventListener("change", () => { signedJerkGuard = sjerkCheck.checked; });
-  ajerkCheck.addEventListener("change", () => { absJerkGuard = ajerkCheck.checked; });
-  decelCheck.addEventListener("change", () => { decelGuard = decelCheck.checked; });
-  angAccelCheck.addEventListener("change", () => { angAccelGuard = angAccelCheck.checked; });
+  accelCheck.addEventListener("change", () => { accelLimiter = accelCheck.checked; });
+  sjerkCheck.addEventListener("change", () => { signedJerkLimiter = sjerkCheck.checked; });
+  ajerkCheck.addEventListener("change", () => { absJerkLimiter = ajerkCheck.checked; });
+  decelCheck.addEventListener("change", () => { decelLimiter = decelCheck.checked; });
+  angAccelCheck.addEventListener("change", () => { angAccelLimiter = angAccelCheck.checked; });
   inertiaCheck.addEventListener("change", () => { inertia = inertiaCheck.checked; });
   leadCompCheck.addEventListener("change", () => { leadComp = leadCompCheck.checked; });
-  // Glide pill toggles (one per guard + dynamic speed): flip the .active class
+  // Glide pill toggles (one per limiter + dynamic speed): flip the .active class
   // and the backing flag on click. Seeded active in the markup (all default on).
   function bindGlideBtn(id, set) {
     const btn = document.getElementById(id);
@@ -482,19 +482,19 @@
   const modeToggle = document.getElementById("modeToggle");
   const modeOpts = modeToggle.querySelectorAll(".seg-opt");
   // Each entry: the checkbox, its sibling threshold row, and a boolean setter.
-  const guardedControls = [
-    { box: accelCheck,  set: (v) => { accelGuard = v; } },
-    { box: sjerkCheck,  set: (v) => { signedJerkGuard = v; } },
-    { box: ajerkCheck,  set: (v) => { absJerkGuard = v; } },
-    { box: decelCheck,  set: (v) => { decelGuard = v; } },
-    { box: angAccelCheck, set: (v) => { angAccelGuard = v; } },
+  const limitedControls = [
+    { box: accelCheck,  set: (v) => { accelLimiter = v; } },
+    { box: sjerkCheck,  set: (v) => { signedJerkLimiter = v; } },
+    { box: ajerkCheck,  set: (v) => { absJerkLimiter = v; } },
+    { box: decelCheck,  set: (v) => { decelLimiter = v; } },
+    { box: angAccelCheck, set: (v) => { angAccelLimiter = v; } },
     { box: inertiaCheck, set: (v) => { inertia = v; } },
     { box: leadCompCheck, set: (v) => { leadComp = v; } },
     { box: smoothCheck, set: (v) => { smoothing = v; } },
   ];
   function setMode(predicted) {
     prediction = predicted;
-    for (const c of guardedControls) {
+    for (const c of limitedControls) {
       const label = c.box.closest("label");
       const thresh = label.nextElementSibling; // the matching .thresh row
       c.box.disabled = !predicted;
@@ -560,40 +560,40 @@
   const OLD_SMOOTH = 0.15;       // pre-update easing (used when prediction off)
   const STALE_MS = 120;          // drop velocity if readings stop coming
 
-  // Linear accel guard: damp the prediction as LINEAR acceleration (m/s^2, from
+  // Linear accel limiter: damp the prediction as LINEAR acceleration (m/s^2, from
   // the DeviceMotion accelerometer — NOT rotation) rises, so a fast translation
   // (shoving the phone) can't amplify sensor jitter into flicker. Distinct from
-  // the Angular decel guard below, which keys off rotational deceleration.
+  // the Angular decel limiter below, which keys off rotational deceleration.
   const ACC_LOW = 3;             // below this (m/s^2) prediction is untouched
   const ACC_HIGH = 4;            // above this the prediction is fully damped
   const ACC_SMOOTH = 0.4;        // EMA factor for the accel magnitude
 
-  // Signed jerk guard: ramp keyed off |smoothed signed LINEAR jerk| (d/dt of the
+  // Signed jerk limiter: ramp keyed off |smoothed signed LINEAR jerk| (d/dt of the
   // DeviceMotion linear accel — still translational, not rotational).
   const JERK_LOW = 10;           // below this (m/s^3) prediction is untouched
   const JERK_HIGH = 15;          // above this the prediction is fully damped
   const JERK_SMOOTH = 0.4;       // EMA factor for the signed jerk
 
-  // AbsJerk guard: ramp keyed off the rectify-then-smooth envelope, which reads
+  // AbsJerk limiter: ramp keyed off the rectify-then-smooth envelope, which reads
   // higher and has a nonzero noise floor, so it gets its own (higher) band.
   const ABSJERK_LOW = 15;        // below this (m/s^3) prediction is untouched
   const ABSJERK_HIGH = 30;       // above this the prediction is fully damped
   const ABSJERK_SMOOTH = 0.4;    // EMA factor for the rectified-jerk envelope
 
-  // Damp glide: ease the combined guard damping toward its target with separate
+  // Damp glide: ease the combined limiter damping toward its target with separate
   // time constants for engaging (toward more damping / 0) and releasing (toward 1).
   const GLIDE_ATTACK_MS = 120;   // glide toward more damping
   const GLIDE_RELEASE_MS = 120;  // glide back toward no damping
 
-  // Angular decel guard (idea 1): damp the prediction while ANGULAR speed (the
+  // Angular decel limiter (idea 1): damp the prediction while ANGULAR speed (the
   // orientation's rotation rate, from DeviceOrientation — NOT the accelerometer)
   // is dropping fast, i.e. a rotation ending abruptly, so the lagging predAngle
-  // can't overshoot. Different quantity/sensor than the Linear accel guard above.
+  // can't overshoot. Different quantity/sensor than the Linear accel limiter above.
   const DECEL_LOW = 20;          // below this (rad/s^2) prediction is untouched
   const DECEL_HIGH = 30;         // above this the prediction is fully damped
   const DECEL_SMOOTH = 0.2;      // EMA factor for the angular-deceleration signal
 
-  // Angular accel guard: the speeding-up counterpart of the decel guard. Damp the
+  // Angular accel limiter: the speeding-up counterpart of the decel limiter. Damp the
   // prediction while ANGULAR acceleration (rotation rate ramping up at the onset
   // of a flick, from DeviceOrientation) is high, so a sharp start can't overshoot.
   const ANGACC_LOW = 20;         // below this (rad/s^2) prediction is untouched
@@ -620,7 +620,7 @@
   const VEL_DROP = 0.7;          // SLOW when detVel < peak * VEL_DROP
   const VEL_RISE = 0.3;          // rad/s; FAST when detVel > valley + VEL_RISE
 
-  // Live, debug-editable copies of each guard's LOW/HIGH band. Default to the
+  // Live, debug-editable copies of each limiter's LOW/HIGH band. Default to the
   // constants above; the number inputs (visible only in debug mode) update
   // these, and frame() uses them in place of the constants when debug is on.
   let accLowV = ACC_LOW, accHighV = ACC_HIGH;
@@ -628,7 +628,7 @@
   let ajerkLowV = ABSJERK_LOW, ajerkHighV = ABSJERK_HIGH;
   let decelLowV = DECEL_LOW, decelHighV = DECEL_HIGH;
   let angAccLowV = ANGACC_LOW, angAccHighV = ANGACC_HIGH;
-  // Per-guard (and dynamic-speed) glide attack/release times (ms) plus the
+  // Per-limiter (and dynamic-speed) glide attack/release times (ms) plus the
   // gliding state each one carries. Seeded from the shared GLIDE_* defaults.
   let accAtkV = GLIDE_ATTACK_MS, accRelV = GLIDE_RELEASE_MS;
   let sjerkAtkV = GLIDE_ATTACK_MS, sjerkRelV = GLIDE_RELEASE_MS;
@@ -660,7 +660,7 @@
   }
 
   // Ease st.v toward target with separate attack/release time constants. For
-  // guards, "attack" = engaging more damping (value falling, attackLower=true);
+  // limiters, "attack" = engaging more damping (value falling, attackLower=true);
   // for dynamic speed it's the value rising (attackLower=false). When off, snap
   // (keeps state in sync so toggling is seamless).
   function glide(st, target, on, atkMs, relMs, dtMs, attackLower) {
@@ -814,7 +814,7 @@
   // (NOT orientation): how the phone is being moved/shoved through space. ---
   let linAccelMag = 0;           // smoothed linear-acceleration magnitude (m/s^2), from e.acceleration
   let jerkMag = 0;               // smoothed linear jerk = d(linAccelMag)/dt (m/s^3); reference only
-  let absJerk = 0;               // EMA of |raw linear jerk| (rectify-then-smooth envelope); drives the jerk guard
+  let absJerk = 0;               // EMA of |raw linear jerk| (rectify-then-smooth envelope); drives the jerk limiter
   let prevLinAccelMag = 0;       // previous linear-accel magnitude, for the jerk finite-difference
   let prevMotionTime = 0;        // timestamp of the last devicemotion sample (ms)
 
@@ -877,11 +877,11 @@
         const prevSpeed = angSpeed;
         angSpeed += (instSpeed - angSpeed) * VEL_SMOOTH;
         // Angular deceleration (rad/s^2), rectified to the slowing-down part
-        // only and EMA-smoothed; drives the Angular decel guard.
+        // only and EMA-smoothed; drives the Angular decel limiter.
         const decel = Math.max(0, (prevSpeed - angSpeed) / dt);
         angDecel += (decel - angDecel) * (debugOn ? decelSmoothV : DECEL_SMOOTH);
         // Angular acceleration (rad/s^2), rectified to the speeding-up part only;
-        // drives the Angular accel guard (damp the prediction at rotation onset).
+        // drives the Angular accel limiter (damp the prediction at rotation onset).
         const angAcc = Math.max(0, (angSpeed - prevSpeed) / dt);
         angAccel += (angAcc - angAccel) * (debugOn ? angAccSmoothV : ANGACC_SMOOTH);
         // Detector velocity feeding the FAST/SLOW peak-detector: a (re)smoothed
@@ -921,7 +921,7 @@
   }
 
   // Track the magnitude of LINEAR acceleration (gravity excluded) from the
-  // accelerometer. Feeds the Linear accel + jerk guards. This is translational
+  // accelerometer. Feeds the Linear accel + jerk limiters. This is translational
   // motion (moving the phone through space), distinct from the angular/rotational
   // signals (angSpeed/angDecel) derived from DeviceOrientation.
   function onMotion(e) {
@@ -933,7 +933,7 @@
 
     // Jerk: rate of change of the (smoothed) acceleration magnitude. We keep a
     // smoothed signed jerk for reference, plus `absJerk` — the rectify-then-
-    // smooth envelope (EMA of |raw jerk|) that drives the guard; staying
+    // smooth envelope (EMA of |raw jerk|) that drives the limiter; staying
     // non-negative, it doesn't dip through zero when jerk changes sign.
     if (prevMotionTime) {
       const dt = (now - prevMotionTime) / 1000;
@@ -955,27 +955,27 @@
   // Each metric: a live accessor, a bar range, and a formatter. `bip` draws a
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
   const debugMetrics = [
-    { label: "lin acc", get: () => linAccelMag,    min: 0, max: 8, enabled: () => accelGuard,
+    { label: "lin acc", get: () => linAccelMag,    min: 0, max: 8, enabled: () => accelLimiter,
       ticks: [{ at: () => accLowV, color: "#ff9b3b", dashed: true }, { at: () => accHighV, color: "#ff5b5b" }],
       color: (v) => v >= accHighV ? "#ff5b5b" : (v >= accLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(2) },
-    { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true, enabled: () => signedJerkGuard,
+    { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true, enabled: () => signedJerkLimiter,
       ticks: [{ at: () => -sjerkHighV, color: "#ff5b5b" }, { at: () => -sjerkLowV, color: "#ff9b3b", dashed: true },
               { at: () => sjerkLowV, color: "#ff9b3b", dashed: true }, { at: () => sjerkHighV, color: "#ff5b5b" }],
       color: (v) => Math.abs(v) >= sjerkHighV ? "#ff5b5b" : (Math.abs(v) >= sjerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
-    { label: "absJerk", get: () => absJerk,       min: 0, max: 50, enabled: () => absJerkGuard,
+    { label: "absJerk", get: () => absJerk,       min: 0, max: 50, enabled: () => absJerkLimiter,
       ticks: [{ at: () => ajerkLowV, color: "#ff9b3b", dashed: true }, { at: () => ajerkHighV, color: "#ff5b5b" }],
       color: (v) => v >= ajerkHighV ? "#ff5b5b" : (v >= ajerkLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
     // Angular signals (rad/s, rad/s^2) from DeviceOrientation, grouped together.
     { label: "ang vel", get: () => angSpeed,      min: 0, max: 6, fmt: (v) => v.toFixed(2) },
-    { label: "ang acc", get: () => angAccel,      min: 0, max: 40, enabled: () => angAccelGuard,
+    { label: "ang acc", get: () => angAccel,      min: 0, max: 40, enabled: () => angAccelLimiter,
       ticks: [{ at: () => angAccLowV, color: "#ff9b3b", dashed: true }, { at: () => angAccHighV, color: "#ff5b5b" }],
       color: (v) => v >= angAccHighV ? "#ff5b5b" : (v >= angAccLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
-    // ang dec drives the Angular decel guard AND Dynamic speed (active if either on).
-    { label: "ang dec", get: () => angDecel,      min: 0, max: 40, enabled: () => decelGuard, tickEnabled: () => decelGuard,
+    // ang dec drives the Angular decel limiter AND Dynamic speed (active if either on).
+    { label: "ang dec", get: () => angDecel,      min: 0, max: 40, enabled: () => decelLimiter, tickEnabled: () => decelLimiter,
       ticks: [{ at: () => decelLowV, color: "#ff9b3b", dashed: true }, { at: () => decelHighV, color: "#ff5b5b" }],
       color: (v) => v >= decelHighV ? "#ff5b5b" : (v >= decelLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(1) },
@@ -1104,13 +1104,13 @@
       const v = m.get();
       const fill = m._fill;
       setFill(fill, v, m.min, m.max, m.bip);
-      // A guarded metric whose guard is off keeps the default fill and gray ticks.
+      // A limited metric whose limiter is off keeps the default fill and gray ticks.
       const enabled = m.enabled ? m.enabled() : true;
       fill.style.background = (m.color && enabled) ? m.color(v) : ((m.warn && m.warn()) ? "#ff5b5b" : "#5b9bff");
       m._val.textContent = m.fmt(v);
 
       // Reposition threshold ticks live (they track the debug-editable bands),
-      // graying them out when the metric's guard is disabled.
+      // graying them out when the metric's limiter is disabled.
       if (m._tickEls) {
         for (let i = 0; i < m._tickEls.length; i++) {
           const at = m.ticks[i].at();
@@ -1162,7 +1162,7 @@
     if (predAngle > MAX_LEAD_ANGLE) predAngle = MAX_LEAD_ANGLE;
     else if (predAngle < -MAX_LEAD_ANGLE) predAngle = -MAX_LEAD_ANGLE;
 
-    // Linear accel guard: as LINEAR acceleration (DeviceMotion) rises from ACC_LOW to ACC_HIGH, ramp
+    // Linear accel limiter: as LINEAR acceleration (DeviceMotion) rises from ACC_LOW to ACC_HIGH, ramp
     // the prediction down to zero so a fast shove can't amplify jitter.
     // (In debug mode the band is taken from the live editors, else the constants.)
     const accLow = debugOn ? accLowV : ACC_LOW;
@@ -1170,20 +1170,20 @@
     let accDamp = 1 - (linAccelMag - accLow) / (accHigh - accLow);
     if (accDamp < 0) accDamp = 0; else if (accDamp > 1) accDamp = 1;
 
-    // Signed jerk guard: ramp keyed off |smoothed signed jerk| (dips on a sign change).
+    // Signed jerk limiter: ramp keyed off |smoothed signed jerk| (dips on a sign change).
     const sjerkLow = debugOn ? sjerkLowV : JERK_LOW;
     const sjerkHigh = debugOn ? sjerkHighV : JERK_HIGH;
     const absSignedJerk = jerkMag < 0 ? -jerkMag : jerkMag;
     let sJerkDamp = 1 - (absSignedJerk - sjerkLow) / (sjerkHigh - sjerkLow);
     if (sJerkDamp < 0) sJerkDamp = 0; else if (sJerkDamp > 1) sJerkDamp = 1;
 
-    // AbsJerk guard: ramp keyed off the rectify-then-smooth envelope.
+    // AbsJerk limiter: ramp keyed off the rectify-then-smooth envelope.
     const ajerkLow = debugOn ? ajerkLowV : ABSJERK_LOW;
     const ajerkHigh = debugOn ? ajerkHighV : ABSJERK_HIGH;
     let aJerkDamp = 1 - (absJerk - ajerkLow) / (ajerkHigh - ajerkLow);
     if (aJerkDamp < 0) aJerkDamp = 0; else if (aJerkDamp > 1) aJerkDamp = 1;
 
-    // Angular decel guard (idea 1): ramp keyed off ANGULAR deceleration (rotation
+    // Angular decel limiter (idea 1): ramp keyed off ANGULAR deceleration (rotation
     // rate slowing, from DeviceOrientation), damping the prediction as a rotation
     // ends abruptly so the lagging lead can't overshoot.
     const decLow = debugOn ? decelLowV : DECEL_LOW;
@@ -1191,16 +1191,16 @@
     let decelDamp = 1 - (angDecel - decLow) / (decHigh - decLow);
     if (decelDamp < 0) decelDamp = 0; else if (decelDamp > 1) decelDamp = 1;
 
-    // Angular accel guard: ramp keyed off angular acceleration (rotation onset),
+    // Angular accel limiter: ramp keyed off angular acceleration (rotation onset),
     // damping the prediction as a flick starts so a sharp start can't overshoot.
     const aaLow = debugOn ? angAccLowV : ANGACC_LOW;
     const aaHigh = debugOn ? angAccHighV : ANGACC_HIGH;
     let angAccDamp = 1 - (angAccel - aaLow) / (aaHigh - aaLow);
     if (angAccDamp < 0) angAccDamp = 0; else if (angAccDamp > 1) angAccDamp = 1;
 
-    // Per-guard damp glide: ease each guard's raw ramp toward its target with
+    // Per-limiter damp glide: ease each limiter's raw ramp toward its target with
     // its own attack (engaging more damping) / release (backing off) times so no
-    // guard snaps `damp` and causes its own flicker. The instantaneous ramps
+    // limiter snaps `damp` and causes its own flicker. The instantaneous ramps
     // above feed the debug bars; the glided values feed the applied damping.
     const dtMs = frameDt * 1000;
     const accG    = glide(accGl,    accDamp,    accGlide,    accAtkV,    accRelV,    dtMs, true);
@@ -1211,11 +1211,11 @@
 
     // targetDamp = raw product (tgtDamp bar); damp = glided product (applied).
     let targetDamp = 1, damp = 1;
-    if (accelGuard)      { targetDamp *= accDamp;    damp *= accG; }
-    if (signedJerkGuard) { targetDamp *= sJerkDamp;  damp *= sJerkG; }
-    if (absJerkGuard)    { targetDamp *= aJerkDamp;  damp *= aJerkG; }
-    if (decelGuard)      { targetDamp *= decelDamp;  damp *= decelG; }
-    if (angAccelGuard)   { targetDamp *= angAccDamp; damp *= angAccG; }
+    if (accelLimiter)      { targetDamp *= accDamp;    damp *= accG; }
+    if (signedJerkLimiter) { targetDamp *= sJerkDamp;  damp *= sJerkG; }
+    if (absJerkLimiter)    { targetDamp *= aJerkDamp;  damp *= aJerkG; }
+    if (decelLimiter)      { targetDamp *= decelDamp;  damp *= decelG; }
+    if (angAccelLimiter)   { targetDamp *= angAccDamp; damp *= angAccG; }
     predAngle *= damp;
 
     // Target the prediction when on; otherwise the raw reading (pre-update).
@@ -1345,7 +1345,7 @@
 
   // Request both permissions together (DeviceMotion is gated separately from
   // DeviceOrientation on iOS). Orientation drives the effect, so it decides
-  // whether activation succeeded; motion only feeds the Linear accel/jerk guards.
+  // whether activation succeeded; motion only feeds the Linear accel/jerk limiters.
   function requestPerms() {
     const motionReq = (typeof DeviceMotionEvent !== "undefined" &&
         typeof DeviceMotionEvent.requestPermission === "function")
