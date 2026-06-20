@@ -69,6 +69,11 @@
   }
   #toggles .opt { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   #toggles .full { grid-column: 1 / -1; }
+  #toggles .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; align-self: start; }
+  #toggles .group-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+    color: rgba(255,255,255,0.55); padding-left: 14px; margin-bottom: 2px;
+  }
   #toggles label {
     display: flex; align-items: center; gap: 8px;
     padding: 9px 14px;
@@ -288,6 +293,9 @@
       <button type="button" class="seg-opt" data-mode="raw">Raw Sensor</button>
       <button type="button" class="seg-opt active" data-mode="predicted">Predicted</button>
     </div>
+    <!-- Left column: every motion limiter. -->
+    <div class="col">
+      <div class="group-label">Limiters</div>
     <div class="opt">
       <label><input type="checkbox" id="accelCheck" checked /> Linear accel limiter<button type="button" class="glide-btn active" id="accGlideBtn">glide</button></label>
       <div class="thresh limiter">
@@ -328,6 +336,11 @@
         <div class="field"><span>rel ms</span><input type="number" id="decelRelInput" step="50" /></div>
       </div>
     </div>
+    </div>
+
+    <!-- Right column: prediction algorithm behaviour. -->
+    <div class="col">
+      <div class="group-label">Algorithm</div>
     <div class="opt" id="settleOpt">
       <div id="settleToggle" class="seg" role="group" aria-label="Inertial settle algorithm">
         <button type="button" class="seg-opt active" data-settle="original">Original</button>
@@ -383,8 +396,10 @@
     <div class="opt">
       <label><input type="checkbox" id="debugCheck" /> Debug</label>
     </div>
-    <label id="densityRow" class="full">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
-    <label id="sizeRow" class="full">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
+    </div>
+
+    <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
+    <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
   </div>
 
   <div id="debug" class="hidden" aria-hidden="true"></div>
