@@ -398,6 +398,9 @@
     <div class="opt">
       <label><input type="checkbox" id="debugCheck" /> Debug<span id="fpsTag" class="fps-tag">– fps</span></label>
     </div>
+    <div class="opt">
+      <label><input type="checkbox" id="demoCheck" /> Demo mode (raw | predicted)</label>
+    </div>
     </div>
 
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
@@ -567,6 +570,12 @@
     debugPanel.classList.toggle("hidden", !debugOn);
     document.body.classList.toggle("debug", debugOn); // reveals the threshold editors
   });
+
+  // Demo mode: split the canvas — left half renders the raw sensor reading, right
+  // half renders the prediction algorithm — with a divider line, for an A/B compare.
+  const demoCheck = document.getElementById("demoCheck");
+  let demoMode = false;
+  demoCheck.addEventListener("change", () => { demoMode = demoCheck.checked; });
 
   // Density slider: higher = denser. Rebuilds the dot grid on change.
   const densitySlider = document.getElementById("densitySlider");
@@ -1281,8 +1290,11 @@
     if (angAccelLimiter)   { targetDamp *= angAccDamp; damp *= angAccG; }
     predAngle *= damp;
 
+    // Demo mode forces the prediction pipeline to run (so the canvas's right half
+    // is genuinely predicted) even if the global mode toggle is on Raw Sensor.
+    const predicting = prediction || demoMode;
     // Target the prediction when on; otherwise the raw reading (pre-update).
-    const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
+    const target = predicting ? rotateAround(measVec, angAxis, predAngle) : measVec;
 
     // Inertial settle -- one of three selectable algorithms (settleMode):
     //  - "original": settle off (inertia=false) -> the easing path in the final else.
@@ -1295,7 +1307,7 @@
     //    weak anchor reels `cur` onto truth. When the detector flips SLOW the follow
     //    freezes and `cur` settles under the anchor instead of chasing the reading.
     let driveDbg = 1, velDbg = 0, peakDbg = 0;
-    if (inertia && prediction && settleMode === "spring") {
+    if (inertia && predicting && settleMode === "spring") {
       // Spring inertial settle: a speed-gated strong spring tracks the
       // absolute led `target` while moving; as measured speed -> 0 the drive fades
       // and `cur` coasts to rest under constant damping. A weak anchor kills drift.
@@ -1311,7 +1323,7 @@
         curVel[i] += accel * frameDt;
         cur[i]    += curVel[i] * frameDt;
       }
-    } else if (inertia && prediction) {
+    } else if (inertia && predicting) {
       driveDbg = settleFast ? 1 : 0;
       velDbg = detVel;
       peakDbg = velPeak;
@@ -1359,7 +1371,7 @@
       // Original easing path (prediction off, or inertial settle disabled).
       // Ease toward the target; snap if smoothing is off. With prediction off
       // we use the original 0.15 easing so the comparison is faithful.
-      let kSmooth = prediction ? (debugOn ? curSmoothV : CUR_SMOOTH) : OLD_SMOOTH;
+      let kSmooth = predicting ? (debugOn ? curSmoothV : CUR_SMOOTH) : OLD_SMOOTH;
       if (!smoothing) kSmooth = 1;
       cur[0] += (target[0] - cur[0]) * kSmooth;
       cur[1] += (target[1] - cur[1]) * kSmooth;
@@ -1367,6 +1379,10 @@
     }
     const len = Math.hypot(cur[0], cur[1], cur[2]) || 1;
     const vx = cur[0] / len, vy = cur[1] / len, vz = cur[2] / len;
+    // Raw sensor vector (unprocessed reading) for demo mode's left half.
+    const rlen = Math.hypot(measVec[0], measVec[1], measVec[2]) || 1;
+    const rvx = measVec[0] / rlen, rvy = measVec[1] / rlen, rvz = measVec[2] / rlen;
+    const splitX = W / 2;
 
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = "#000000";
@@ -1377,9 +1393,13 @@
     for (let k = 0; hasData && k < dots.length; k++) {
       const d = dots[k];
       const t = d.target;
+      // Demo mode: dots left of the divider read the raw sensor vector, dots to the
+      // right read the predicted vector. Otherwise everything uses the predicted one.
+      let ox = vx, oy = vy, oz = vz;
+      if (demoMode && d.x < splitX) { ox = rvx; oy = rvy; oz = rvz; }
       // Each dot responds to two poles: its target and the antipodal target
       // (-target). Both light the dot the same way; take whichever is closer.
-      let dot = vx * t[0] + vy * t[1] + vz * t[2];
+      let dot = ox * t[0] + oy * t[1] + oz * t[2];
       if (dot > 1) dot = 1; else if (dot < -1) dot = -1;
       const angA = Math.acos(dot);   // distance to the target (0 = exact match)
       const angB = Math.acos(-dot);  // distance to the opposite target (= PI - angA)
@@ -1394,6 +1414,24 @@
       ctx.beginPath();
       ctx.arc(d.x, d.y, dotRadius, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // Demo mode divider + side labels (drawn over the dots).
+    if (demoMode && hasData) {
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(splitX, 0);
+      ctx.lineTo(splitX, H);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.font = "600 13px system-ui, -apple-system, sans-serif";
+      ctx.textBaseline = "top";
+      ctx.textAlign = "right";
+      ctx.fillText("RAW", splitX - 12, 12);
+      ctx.textAlign = "left";
+      ctx.fillText("PREDICTED", splitX + 12, 12);
     }
 
     if (debugOn) {
