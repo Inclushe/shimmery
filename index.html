@@ -341,19 +341,19 @@
     <div class="opt" id="settleOpt">
       <div id="settleToggle" class="seg" role="group" aria-label="Inertial settle algorithm">
         <button type="button" class="seg-opt active" data-settle="original">Original</button>
-        <button type="button" class="seg-opt" data-settle="main">Main</button>
+        <button type="button" class="seg-opt" data-settle="spring">Spring</button>
         <button type="button" class="seg-opt" data-settle="comoving">Co-moving</button>
       </div>
       <!-- Original = inertial settle off (plain predicted easing); it has no options. -->
-      <!-- Main: the main-branch speed-gated spring (its own variables). -->
-      <div class="settle-panel" data-settle="main">
+      <!-- Spring: the main-branch speed-gated spring (its own variables). -->
+      <div class="settle-panel" data-settle="spring">
         <div class="thresh">
-          <div class="field"><span>speed</span><input type="number" id="mainSpeedInput" step="0.1" /></div>
-          <div class="field"><span>track</span><input type="number" id="mainTrackInput" step="10" /></div>
-          <div class="field"><span>anchor</span><input type="number" id="mainAnchorInput" step="0.5" /></div>
-          <div class="field"><span>damp</span><input type="number" id="mainDampInput" step="1" /></div>
+          <div class="field"><span>speed</span><input type="number" id="springSpeedInput" step="0.1" /></div>
+          <div class="field"><span>track</span><input type="number" id="springTrackInput" step="10" /></div>
+          <div class="field"><span>anchor</span><input type="number" id="springAnchorInput" step="0.5" /></div>
+          <div class="field"><span>damp</span><input type="number" id="springDampInput" step="1" /></div>
         </div>
-        <div class="presets" data-group="main">
+        <div class="presets" data-group="spring">
           <button type="button" data-preset="soft">Soft</button>
           <button type="button" data-preset="calm">Calm</button>
           <button type="button" data-preset="snap">Snap</button>
@@ -377,7 +377,7 @@
           <button type="button" data-preset="soft">Soft</button>
           <button type="button" data-preset="calm">Calm</button>
           <button type="button" data-preset="snap">Snap</button>
-          <button type="button" data-preset="main">Main</button>
+          <button type="button" data-preset="spring">Spring</button>
         </div>
       </div>
     </div>
@@ -472,7 +472,7 @@
   let decelLimiter = false;   // idea 1: damp prediction during abrupt deceleration
   let angAccelLimiter = false; // damp prediction during abrupt rotation onset (off: it opposes snappy onset)
   let inertia = false;      // settle active (false only for the "Original" algorithm); derived from settleMode
-  let settleMode = "original"; // which inertial settle algorithm: "original" | "main" | "comoving"
+  let settleMode = "original"; // which inertial settle algorithm: "original" | "spring" | "comoving"
   let leadComp = true;     // pre-pay the spring's c/k group delay by extending the lead (borrowed from main)
   // Per-limiter glide enables (default on).
   let accGlide = true, sjerkGlide = true, ajerkGlide = true,
@@ -519,7 +519,7 @@
     { box: smoothCheck, set: (v) => { smoothing = v; } },
   ];
   // Inertial settle algorithm switch (segmented, like the Raw/Predicted toggle):
-  // "Original" turns the settle off (plain predicted easing); "Main" and
+  // "Original" turns the settle off (plain predicted easing); "Spring" and
   // "Co-moving" run two independent algorithms, each with its own options panel.
   const settleToggle = document.getElementById("settleToggle");
   const settleOptBlock = document.getElementById("settleOpt");
@@ -659,14 +659,14 @@
   const COAST = 0.25;            // 0..1; fraction of the motion's momentum kept entering SLOW (coast-through)
   const BASE_TRACK = 0.05;       // 0..1; per-frame rate the co-moving setpoint base bleeds toward raw truth
   const LEAD_RATE = 1;           // multiplier on how fast the lead grows in with motion (1 = at the motion's rate)
-  // Main-branch inertial settle, kept selectable for A/B. A speed-gated strong
+  // Spring inertial settle (from the main branch), kept selectable for A/B. A speed-gated strong
   // spring tracks the led target while moving; as measured speed -> 0 the drive
   // fades and `cur` coasts to rest under constant damping. Its own variables --
   // nothing is shared with the co-moving algorithm above.
-  const MAIN_SETTLE_SPEED = 1.0; // rad/s; at/above this the measured-speed drive is full
-  const MAIN_TRACK_STIFF  = 2500;// 1/s^2; strong tracking spring (gated by measured speed)
-  const MAIN_ANCHOR_STIFF = 1;   // 1/s^2; weak always-on spring toward raw truth
-  const MAIN_DAMP_STIFF   = 70;  // 1/s; constant velocity damping (= 2*sqrt(2500)*0.7, zeta 0.7)
+  const SPRING_SETTLE_SPEED = 1.0; // rad/s; at/above this the measured-speed drive is full
+  const SPRING_TRACK_STIFF  = 2500;// 1/s^2; strong tracking spring (gated by measured speed)
+  const SPRING_ANCHOR_STIFF = 1;   // 1/s^2; weak always-on spring toward raw truth
+  const SPRING_DAMP_STIFF   = 70;  // 1/s; constant velocity damping (= 2*sqrt(2500)*0.7, zeta 0.7)
   // Velocity peak-detector: FAST while the detector velocity climbs/holds at its
   // peak; SLOW once it falls below VEL_DROP of the peak (a movement winding down,
   // latched through to rest); re-arm FAST when it rises VEL_RISE above its valley
@@ -698,8 +698,8 @@
   let springStiffV = SPRING_STIFF, springZetaV = SPRING_ZETA; // spring knobs (`stiff`/`zeta`)
   let coastV = COAST;                // momentum kept entering SLOW (the `coast` field)
   let baseTrackV = BASE_TRACK, leadRateV = LEAD_RATE; // co-moving setpoint knobs (`basetrk`/`leadrt`)
-  let mainSpeedV = MAIN_SETTLE_SPEED, mainTrackV = MAIN_TRACK_STIFF, // main algo knobs (`speed`/`track`/
-      mainAnchorV = MAIN_ANCHOR_STIFF, mainDampV = MAIN_DAMP_STIFF;  // `anchor`/`damp`) -- independent vars
+  let springSpeedV = SPRING_SETTLE_SPEED, springTrackV = SPRING_TRACK_STIFF, // spring algo knobs (`speed`/`track`/
+      springAnchorV = SPRING_ANCHOR_STIFF, springDampV = SPRING_DAMP_STIFF;  // `anchor`/`damp`) -- independent vars
   let velDropV = VEL_DROP, velRiseV = VEL_RISE, velSmoothV = VEL_DET_SMOOTH;
   let accSmoothV = ACC_SMOOTH;       // EMA factor for accel magnitude (debug-editable)
   let sjerkSmoothV = JERK_SMOOTH;    // EMA factor for signed jerk
@@ -760,32 +760,32 @@
   bindThreshold("riseInput", VEL_RISE, (v) => { velRiseV = v; });
   bindThreshold("vsmoothInput", VEL_DET_SMOOTH, (v) => { velSmoothV = v; });
 
-  // Main algorithm inputs (its own variables, independent from co-moving).
-  bindThreshold("mainSpeedInput", MAIN_SETTLE_SPEED, (v) => { mainSpeedV = v; });
-  bindThreshold("mainTrackInput", MAIN_TRACK_STIFF, (v) => { mainTrackV = v; });
-  bindThreshold("mainAnchorInput", MAIN_ANCHOR_STIFF, (v) => { mainAnchorV = v; });
-  bindThreshold("mainDampInput", MAIN_DAMP_STIFF, (v) => { mainDampV = v; });
+  // Spring algorithm inputs (its own variables, independent from co-moving).
+  bindThreshold("springSpeedInput", SPRING_SETTLE_SPEED, (v) => { springSpeedV = v; });
+  bindThreshold("springTrackInput", SPRING_TRACK_STIFF, (v) => { springTrackV = v; });
+  bindThreshold("springAnchorInput", SPRING_ANCHOR_STIFF, (v) => { springAnchorV = v; });
+  bindThreshold("springDampInput", SPRING_DAMP_STIFF, (v) => { springDampV = v; });
 
   // Per-algorithm presets. Each group owns its own buttons (data-group), inputs,
   // and preset table -- no values are shared between algorithms.
   //   Co-moving: spanning the damping spectrum (c = 2*sqrt(stiff)*zeta); each is a
-  //   FULL config (spring + lead + setpoint knobs) so switching is clean. "Main"
-  //   here emulates main's feel within the co-moving algo (basetrk 1, leadrt 10,
+  //   FULL config (spring + lead + setpoint knobs) so switching is clean. "Spring"
+  //   here emulates the Spring algo's feel within the co-moving algo (basetrk 1, leadrt 10,
   //   coast 0, drop/rise 0 -> gate defeated, flicker and all).
-  //   Main: main's own Soft/Calm/Snap over speed/track/anchor/damp.
+  //   Spring: the Spring algo's own Soft/Calm/Snap over speed/track/anchor/damp.
   const comovingPresets = {
     soft: { stiffInput: 1000, zetaInput: 1.1, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
     calm: { stiffInput: 1600, zetaInput: 1.0, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
     snap: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
-    main: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0, riseInput: 0 },
+    spring: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0, riseInput: 0 },
   };
   const comovingInputIds = ["stiffInput", "zetaInput", "anchorStiffInput", "leadTimeInput", "coastInput", "baseTrackInput", "leadRateInput", "dropInput", "riseInput"];
-  const mainPresets = {
-    soft: { mainSpeedInput: 1.0, mainTrackInput: 1000, mainAnchorInput: 1, mainDampInput: 70 },
-    calm: { mainSpeedInput: 1.0, mainTrackInput: 1600, mainAnchorInput: 1, mainDampInput: 80 },
-    snap: { mainSpeedInput: 1.0, mainTrackInput: 2500, mainAnchorInput: 1, mainDampInput: 70 },
+  const springPresets = {
+    soft: { springSpeedInput: 1.0, springTrackInput: 1000, springAnchorInput: 1, springDampInput: 70 },
+    calm: { springSpeedInput: 1.0, springTrackInput: 1600, springAnchorInput: 1, springDampInput: 80 },
+    snap: { springSpeedInput: 1.0, springTrackInput: 2500, springAnchorInput: 1, springDampInput: 70 },
   };
-  const mainInputIds = ["mainSpeedInput", "mainTrackInput", "mainAnchorInput", "mainDampInput"];
+  const springInputIds = ["springSpeedInput", "springTrackInput", "springAnchorInput", "springDampInput"];
   // Wire one preset group: highlight the button matching the current inputs, apply
   // on click, and clear/re-light the highlight on any hand-edit.
   function setupPresetGroup(group, presets, inputIds) {
@@ -813,7 +813,7 @@
     refresh();
   }
   setupPresetGroup("comoving", comovingPresets, comovingInputIds);
-  setupPresetGroup("main", mainPresets, mainInputIds);
+  setupPresetGroup("spring", springPresets, springInputIds);
   bindThreshold("accSmoothInput", ACC_SMOOTH, (v) => { accSmoothV = v; });
   bindThreshold("sjerkSmoothInput", JERK_SMOOTH, (v) => { sjerkSmoothV = v; });
   bindThreshold("ajerkSmoothInput", ABSJERK_SMOOTH, (v) => { ajerkSmoothV = v; });
@@ -1206,9 +1206,9 @@
 
   // Group delay (seconds) of the active settle algorithm tracking a ramp, which
   // lead compensation pre-pays so the result lands the full lead ahead despite the
-  // spring's lag. Co-moving: c/k = 2*zeta/sqrt(stiff). Main: damp/track (its form).
+  // spring's lag. Co-moving: c/k = 2*zeta/sqrt(stiff). Spring: damp/track (its form).
   function settleLagSec() {
-    if (settleMode === "main") return mainTrackV > 0 ? mainDampV / mainTrackV : 0;
+    if (settleMode === "spring") return springTrackV > 0 ? springDampV / springTrackV : 0;
     if (settleMode === "comoving") return springStiffV > 0 ? 2 * springZetaV / Math.sqrt(springStiffV) : 0;
     return 0;
   }
@@ -1307,7 +1307,7 @@
 
     // Inertial settle -- one of three selectable algorithms (settleMode):
     //  - "original": settle off (inertia=false) -> the easing path in the final else.
-    //  - "main": the main branch's speed-gated spring (below).
+    //  - "spring": the main branch's speed-gated spring (below).
     //  - "comoving" (default): velocity-coupled spring on a CO-MOVING setpoint --
     //    while a movement builds/holds (FAST) `cur` is PACED by the angular velocity
     //    (rotated by angSpeed*dt). The strong spring chases a setpoint seeded to
@@ -1316,19 +1316,19 @@
     //    weak anchor reels `cur` onto truth. When the detector flips SLOW the follow
     //    freezes and `cur` settles under the anchor instead of chasing the reading.
     let driveDbg = 1, velDbg = 0, peakDbg = 0;
-    if (inertia && prediction && settleMode === "main") {
-      // Main-branch inertial settle: a speed-gated strong spring tracks the
+    if (inertia && prediction && settleMode === "spring") {
+      // Spring inertial settle: a speed-gated strong spring tracks the
       // absolute led `target` while moving; as measured speed -> 0 the drive fades
       // and `cur` coasts to rest under constant damping. A weak anchor kills drift.
       // No velocity-follow and no FAST/SLOW gate -- its own independent variables.
-      let drive = angSpeed / mainSpeedV; // 1 while moving -> 0 at rest
+      let drive = angSpeed / springSpeedV; // 1 while moving -> 0 at rest
       if (drive > 1) drive = 1; else if (drive < 0) drive = 0;
       driveDbg = drive; velDbg = detVel; peakDbg = velPeak;
-      const kTrack = mainTrackV * drive;
+      const kTrack = springTrackV * drive;
       for (let i = 0; i < 3; i++) {
         const accel = kTrack * (target[i] - cur[i])
-                    + mainAnchorV * (measVec[i] - cur[i])
-                    - mainDampV * curVel[i];
+                    + springAnchorV * (measVec[i] - cur[i])
+                    - springDampV * curVel[i];
         curVel[i] += accel * frameDt;
         cur[i]    += curVel[i] * frameDt;
       }
