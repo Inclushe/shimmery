@@ -293,6 +293,7 @@
   <div id="toggles">
     <div id="modeToggle" class="full seg" role="group" aria-label="Orientation mode">
       <button type="button" class="seg-opt" data-mode="raw">Raw Sensor</button>
+      <button type="button" class="seg-opt" data-mode="demo">Demo</button>
       <button type="button" class="seg-opt active" data-mode="predicted">Predicted</button>
     </div>
     <!-- Left column: every motion limiter. -->
@@ -398,9 +399,6 @@
     <div class="opt">
       <label><input type="checkbox" id="debugCheck" /> Debug<span id="fpsTag" class="fps-tag">– fps</span></label>
     </div>
-    <div class="opt">
-      <label><input type="checkbox" id="demoCheck" /> Demo mode (raw | predicted)</label>
-    </div>
     </div>
 
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
@@ -473,6 +471,7 @@
   // limiter engaging abruptly doesn't slam `damp` and cause its own flicker.
   let smoothing = true;
   let prediction = true;
+  let demoMode = false;     // split canvas: raw (left) vs predicted (right); the "Demo" mode
   let accelLimiter = true;
   let absJerkLimiter = true;
   let decelLimiter = false;   // idea 1: damp prediction during abrupt deceleration
@@ -536,27 +535,32 @@
   }
   settleOpts.forEach((o) =>
     o.addEventListener("click", () => { if (!o.disabled) setSettleMode(o.dataset.settle); }));
-  function setMode(predicted) {
-    prediction = predicted;
+  // Orientation mode is a 3-way segmented switch: "raw" (sensor as-is), "demo"
+  // (split canvas: raw left, predicted right), and "predicted". Demo and Predicted
+  // both run the prediction pipeline, so the prediction-only controls stay enabled
+  // for both; only Raw greys them out and forces them off.
+  function setMode(mode) {
+    prediction = mode !== "raw";
+    demoMode = mode === "demo";
     for (const c of limitedControls) {
       const label = c.box.closest("label");
       const thresh = label.nextElementSibling; // the matching .thresh row
-      c.box.disabled = !predicted;
-      label.classList.toggle("disabled", !predicted);
+      c.box.disabled = !prediction;
+      label.classList.toggle("disabled", !prediction);
       if (thresh && thresh.classList.contains("thresh")) {
-        thresh.classList.toggle("disabled", !predicted);
-        thresh.querySelectorAll("input").forEach((el) => { el.disabled = !predicted; });
+        thresh.classList.toggle("disabled", !prediction);
+        thresh.querySelectorAll("input").forEach((el) => { el.disabled = !prediction; });
       }
       // Force false in raw mode; restore the remembered checkbox value otherwise.
-      c.set(predicted ? c.box.checked : false);
+      c.set(prediction ? c.box.checked : false);
     }
     // The settle switch + its option panels are prediction-only too: grey them out
     // in Raw mode (the easing path runs regardless of the selected algorithm).
-    settleOptBlock.classList.toggle("disabled", !predicted);
-    settleOptBlock.querySelectorAll("button, input").forEach((el) => { el.disabled = !predicted; });
-    modeOpts.forEach((o) => o.classList.toggle("active", (o.dataset.mode === "predicted") === predicted));
+    settleOptBlock.classList.toggle("disabled", !prediction);
+    settleOptBlock.querySelectorAll("button, input").forEach((el) => { el.disabled = !prediction; });
+    modeOpts.forEach((o) => o.classList.toggle("active", o.dataset.mode === mode));
   }
-  modeOpts.forEach((o) => o.addEventListener("click", () => setMode(o.dataset.mode === "predicted")));
+  modeOpts.forEach((o) => o.addEventListener("click", () => setMode(o.dataset.mode)));
 
   // Debug overlay: when on, show a live readout of the internal signals that
   // drive the effect (accel magnitude, damping, angular velocity, vectors).
@@ -570,12 +574,6 @@
     debugPanel.classList.toggle("hidden", !debugOn);
     document.body.classList.toggle("debug", debugOn); // reveals the threshold editors
   });
-
-  // Demo mode: split the canvas — left half renders the raw sensor reading, right
-  // half renders the prediction algorithm — with a divider line, for an A/B compare.
-  const demoCheck = document.getElementById("demoCheck");
-  let demoMode = false;
-  demoCheck.addEventListener("change", () => { demoMode = demoCheck.checked; });
 
   // Density slider: higher = denser. Rebuilds the dot grid on change.
   const densitySlider = document.getElementById("densitySlider");
@@ -1290,11 +1288,8 @@
     if (angAccelLimiter)   { targetDamp *= angAccDamp; damp *= angAccG; }
     predAngle *= damp;
 
-    // Demo mode forces the prediction pipeline to run (so the canvas's right half
-    // is genuinely predicted) even if the global mode toggle is on Raw Sensor.
-    const predicting = prediction || demoMode;
-    // Target the prediction when on; otherwise the raw reading (pre-update).
-    const target = predicting ? rotateAround(measVec, angAxis, predAngle) : measVec;
+    // Target the prediction when on (Demo and Predicted); otherwise the raw reading.
+    const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
 
     // Inertial settle -- one of three selectable algorithms (settleMode):
     //  - "original": settle off (inertia=false) -> the easing path in the final else.
@@ -1307,7 +1302,7 @@
     //    weak anchor reels `cur` onto truth. When the detector flips SLOW the follow
     //    freezes and `cur` settles under the anchor instead of chasing the reading.
     let driveDbg = 1, velDbg = 0, peakDbg = 0;
-    if (inertia && predicting && settleMode === "spring") {
+    if (inertia && prediction && settleMode === "spring") {
       // Spring inertial settle: a speed-gated strong spring tracks the
       // absolute led `target` while moving; as measured speed -> 0 the drive fades
       // and `cur` coasts to rest under constant damping. A weak anchor kills drift.
@@ -1323,7 +1318,7 @@
         curVel[i] += accel * frameDt;
         cur[i]    += curVel[i] * frameDt;
       }
-    } else if (inertia && predicting) {
+    } else if (inertia && prediction) {
       driveDbg = settleFast ? 1 : 0;
       velDbg = detVel;
       peakDbg = velPeak;
@@ -1371,7 +1366,7 @@
       // Original easing path (prediction off, or inertial settle disabled).
       // Ease toward the target; snap if smoothing is off. With prediction off
       // we use the original 0.15 easing so the comparison is faithful.
-      let kSmooth = predicting ? (debugOn ? curSmoothV : CUR_SMOOTH) : OLD_SMOOTH;
+      let kSmooth = prediction ? (debugOn ? curSmoothV : CUR_SMOOTH) : OLD_SMOOTH;
       if (!smoothing) kSmooth = 1;
       cur[0] += (target[0] - cur[0]) * kSmooth;
       cur[1] += (target[1] - cur[1]) * kSmooth;
@@ -1392,6 +1387,8 @@
     // dots don't flash at the default orientation on load.
     for (let k = 0; hasData && k < dots.length; k++) {
       const d = dots[k];
+      // Demo mode: drop dots that straddle the divider so the two sides read clean.
+      if (demoMode && Math.abs(d.x - splitX) <= dotRadius + 0.5) continue;
       const t = d.target;
       // Demo mode: dots left of the divider read the raw sensor vector, dots to the
       // right read the predicted vector. Otherwise everything uses the predicted one.
