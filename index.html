@@ -92,8 +92,8 @@
   .thresh.disabled { opacity: 0.4; }
   .thresh.disabled input { cursor: not-allowed; }
 
-  /* Segmented "Raw Sensor / Predicted" pill toggle */
-  #modeToggle {
+  /* Segmented pill toggle (Raw/Predicted mode, and the settle-algorithm switch) */
+  .seg {
     display: flex; align-items: stretch;
     padding: 3px;
     border: 1px solid rgba(255,255,255,0.25);
@@ -102,7 +102,7 @@
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   }
-  #modeToggle .seg-opt {
+  .seg .seg-opt {
     flex: 1;
     padding: 6px 14px;
     border: none; border-radius: 999px;
@@ -112,7 +112,10 @@
     cursor: pointer; white-space: nowrap;
     transition: background .15s ease, color .15s ease;
   }
-  #modeToggle .seg-opt.active { background: #fff; color: #14161e; }
+  .seg .seg-opt.active { background: #fff; color: #14161e; }
+  /* Only the selected settle algorithm's options/presets are shown. */
+  .settle-panel { display: none; }
+  .settle-panel.active { display: block; }
 
   /* Per-limiter threshold editors, revealed only in debug mode */
   .thresh { display: none; gap: 8px; margin: 0 0 0 14px; align-items: flex-start; flex-wrap: wrap; }
@@ -281,7 +284,7 @@
     </div>
   </div>
   <div id="toggles">
-    <div id="modeToggle" class="full" role="group" aria-label="Orientation mode">
+    <div id="modeToggle" class="full seg" role="group" aria-label="Orientation mode">
       <button type="button" class="seg-opt" data-mode="raw">Raw Sensor</button>
       <button type="button" class="seg-opt active" data-mode="predicted">Predicted</button>
     </div>
@@ -326,7 +329,7 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="decelCheck" checked /> Angular decel limiter<button type="button" class="glide-btn active" id="decelGlideBtn">glide</button></label>
+      <label><input type="checkbox" id="decelCheck" /> Angular decel limiter<button type="button" class="glide-btn active" id="decelGlideBtn">glide</button></label>
       <div class="thresh limiter">
         <div class="field"><span>low</span><input type="number" id="decelLowInput" step="1" /></div>
         <div class="field"><span>high</span><input type="number" id="decelHighInput" step="1" /></div>
@@ -335,22 +338,47 @@
         <div class="field"><span>rel ms</span><input type="number" id="decelRelInput" step="50" /></div>
       </div>
     </div>
-    <div class="opt">
-      <label><input type="checkbox" id="inertiaCheck" checked /> Inertial settle</label>
-      <div class="thresh">
-        <div class="field"><span>lead ms</span><input type="number" id="leadTimeInput" step="5" /></div>
-        <div class="field"><span>stiff</span><input type="number" id="stiffInput" step="100" /></div>
-        <div class="field"><span>zeta</span><input type="number" id="zetaInput" step="0.05" /></div>
-        <div class="field"><span>anchor</span><input type="number" id="anchorStiffInput" step="0.5" /></div>
-        <div class="field"><span>coast</span><input type="number" id="coastInput" step="0.05" min="0" max="1" /></div>
-        <div class="field"><span>drop</span><input type="number" id="dropInput" step="0.05" min="0" max="1" /></div>
-        <div class="field"><span>rise</span><input type="number" id="riseInput" step="0.05" /></div>
-        <div class="field"><span>vsmooth</span><input type="number" id="vsmoothInput" step="0.05" min="0" max="1" /></div>
+    <div class="opt" id="settleOpt">
+      <div id="settleToggle" class="seg" role="group" aria-label="Inertial settle algorithm">
+        <button type="button" class="seg-opt active" data-settle="original">Original</button>
+        <button type="button" class="seg-opt" data-settle="main">Main</button>
+        <button type="button" class="seg-opt" data-settle="comoving">Co-moving</button>
       </div>
-      <div class="presets">
-        <button type="button" data-preset="soft">Soft</button>
-        <button type="button" data-preset="calm">Calm</button>
-        <button type="button" data-preset="snap">Snap</button>
+      <!-- Original = inertial settle off (plain predicted easing); it has no options. -->
+      <!-- Main: the main-branch speed-gated spring (its own variables). -->
+      <div class="settle-panel" data-settle="main">
+        <div class="thresh">
+          <div class="field"><span>speed</span><input type="number" id="mainSpeedInput" step="0.1" /></div>
+          <div class="field"><span>track</span><input type="number" id="mainTrackInput" step="10" /></div>
+          <div class="field"><span>anchor</span><input type="number" id="mainAnchorInput" step="0.5" /></div>
+          <div class="field"><span>damp</span><input type="number" id="mainDampInput" step="1" /></div>
+        </div>
+        <div class="presets" data-group="main">
+          <button type="button" data-preset="soft">Soft</button>
+          <button type="button" data-preset="calm">Calm</button>
+          <button type="button" data-preset="snap">Snap</button>
+        </div>
+      </div>
+      <!-- Co-moving: this branch's velocity-coupled setpoint spring (its own variables). -->
+      <div class="settle-panel" data-settle="comoving">
+        <div class="thresh">
+          <div class="field"><span>lead ms</span><input type="number" id="leadTimeInput" step="5" /></div>
+          <div class="field"><span>stiff</span><input type="number" id="stiffInput" step="100" /></div>
+          <div class="field"><span>zeta</span><input type="number" id="zetaInput" step="0.05" /></div>
+          <div class="field"><span>anchor</span><input type="number" id="anchorStiffInput" step="0.5" /></div>
+          <div class="field"><span>coast</span><input type="number" id="coastInput" step="0.05" min="0" max="1" /></div>
+          <div class="field"><span>basetrk</span><input type="number" id="baseTrackInput" step="0.01" min="0" max="1" /></div>
+          <div class="field"><span>leadrt</span><input type="number" id="leadRateInput" step="0.1" min="0" /></div>
+          <div class="field"><span>drop</span><input type="number" id="dropInput" step="0.05" min="0" max="1" /></div>
+          <div class="field"><span>rise</span><input type="number" id="riseInput" step="0.05" /></div>
+          <div class="field"><span>vsmooth</span><input type="number" id="vsmoothInput" step="0.05" min="0" max="1" /></div>
+        </div>
+        <div class="presets" data-group="comoving">
+          <button type="button" data-preset="soft">Soft</button>
+          <button type="button" data-preset="calm">Calm</button>
+          <button type="button" data-preset="snap">Snap</button>
+          <button type="button" data-preset="main">Main</button>
+        </div>
       </div>
     </div>
     <div class="opt">
@@ -417,7 +445,6 @@
   const ajerkCheck = document.getElementById("ajerkCheck");
   const decelCheck = document.getElementById("decelCheck");
   const angAccelCheck = document.getElementById("angAccelCheck");
-  const inertiaCheck = document.getElementById("inertiaCheck");
   const leadCompCheck = document.getElementById("leadCompCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
@@ -442,9 +469,10 @@
   let accelLimiter = true;
   let signedJerkLimiter = false;
   let absJerkLimiter = true;
-  let decelLimiter = true;   // idea 1: damp prediction during abrupt deceleration
+  let decelLimiter = false;   // idea 1: damp prediction during abrupt deceleration
   let angAccelLimiter = false; // damp prediction during abrupt rotation onset (off: it opposes snappy onset)
-  let inertia = true;      // inertial settle: cur coasts to rest, weak anchor to truth
+  let inertia = false;      // settle active (false only for the "Original" algorithm); derived from settleMode
+  let settleMode = "original"; // which inertial settle algorithm: "original" | "main" | "comoving"
   let leadComp = true;     // pre-pay the spring's c/k group delay by extending the lead (borrowed from main)
   // Per-limiter glide enables (default on).
   let accGlide = true, sjerkGlide = true, ajerkGlide = true,
@@ -455,7 +483,6 @@
   ajerkCheck.addEventListener("change", () => { absJerkLimiter = ajerkCheck.checked; });
   decelCheck.addEventListener("change", () => { decelLimiter = decelCheck.checked; });
   angAccelCheck.addEventListener("change", () => { angAccelLimiter = angAccelCheck.checked; });
-  inertiaCheck.addEventListener("change", () => { inertia = inertiaCheck.checked; });
   leadCompCheck.addEventListener("change", () => { leadComp = leadCompCheck.checked; });
   // Glide pill toggles (one per limiter + dynamic speed): flip the .active class
   // and the backing flag on click. Seeded active in the markup (all default on).
@@ -488,10 +515,24 @@
     { box: ajerkCheck,  set: (v) => { absJerkLimiter = v; } },
     { box: decelCheck,  set: (v) => { decelLimiter = v; } },
     { box: angAccelCheck, set: (v) => { angAccelLimiter = v; } },
-    { box: inertiaCheck, set: (v) => { inertia = v; } },
     { box: leadCompCheck, set: (v) => { leadComp = v; } },
     { box: smoothCheck, set: (v) => { smoothing = v; } },
   ];
+  // Inertial settle algorithm switch (segmented, like the Raw/Predicted toggle):
+  // "Original" turns the settle off (plain predicted easing); "Main" and
+  // "Co-moving" run two independent algorithms, each with its own options panel.
+  const settleToggle = document.getElementById("settleToggle");
+  const settleOptBlock = document.getElementById("settleOpt");
+  const settleOpts = settleToggle.querySelectorAll(".seg-opt");
+  const settlePanels = settleOptBlock.querySelectorAll(".settle-panel");
+  function setSettleMode(mode) {
+    settleMode = mode;
+    inertia = mode !== "original"; // Original = settle off
+    settleOpts.forEach((o) => o.classList.toggle("active", o.dataset.settle === mode));
+    settlePanels.forEach((p) => p.classList.toggle("active", p.dataset.settle === mode));
+  }
+  settleOpts.forEach((o) =>
+    o.addEventListener("click", () => { if (!o.disabled) setSettleMode(o.dataset.settle); }));
   function setMode(predicted) {
     prediction = predicted;
     for (const c of limitedControls) {
@@ -506,6 +547,10 @@
       // Force false in raw mode; restore the remembered checkbox value otherwise.
       c.set(predicted ? c.box.checked : false);
     }
+    // The settle switch + its option panels are prediction-only too: grey them out
+    // in Raw mode (the easing path runs regardless of the selected algorithm).
+    settleOptBlock.classList.toggle("disabled", !predicted);
+    settleOptBlock.querySelectorAll("button, input").forEach((el) => { el.disabled = !predicted; });
     modeOpts.forEach((o) => o.classList.toggle("active", (o.dataset.mode === "predicted") === predicted));
   }
   modeOpts.forEach((o) => o.addEventListener("click", () => setMode(o.dataset.mode === "predicted")));
@@ -612,6 +657,16 @@
   const SPRING_ZETA  = 0.7;      // damping ratio; c = 2*sqrt(k)*zeta. < 1 overshoots (Snap = 0.7)
   const ANCHOR_STIFF = 1;        // 1/s^2; weak always-on spring toward raw truth (drift correction)
   const COAST = 0.25;            // 0..1; fraction of the motion's momentum kept entering SLOW (coast-through)
+  const BASE_TRACK = 0.05;       // 0..1; per-frame rate the co-moving setpoint base bleeds toward raw truth
+  const LEAD_RATE = 1;           // multiplier on how fast the lead grows in with motion (1 = at the motion's rate)
+  // Main-branch inertial settle, kept selectable for A/B. A speed-gated strong
+  // spring tracks the led target while moving; as measured speed -> 0 the drive
+  // fades and `cur` coasts to rest under constant damping. Its own variables --
+  // nothing is shared with the co-moving algorithm above.
+  const MAIN_SETTLE_SPEED = 1.0; // rad/s; at/above this the measured-speed drive is full
+  const MAIN_TRACK_STIFF  = 2500;// 1/s^2; strong tracking spring (gated by measured speed)
+  const MAIN_ANCHOR_STIFF = 1;   // 1/s^2; weak always-on spring toward raw truth
+  const MAIN_DAMP_STIFF   = 70;  // 1/s; constant velocity damping (= 2*sqrt(2500)*0.7, zeta 0.7)
   // Velocity peak-detector: FAST while the detector velocity climbs/holds at its
   // peak; SLOW once it falls below VEL_DROP of the peak (a movement winding down,
   // latched through to rest); re-arm FAST when it rises VEL_RISE above its valley
@@ -642,6 +697,9 @@
       anchorV = ANCHOR_STIFF;        // 1/s^2; weak spring toward raw truth (the `anchor` field)
   let springStiffV = SPRING_STIFF, springZetaV = SPRING_ZETA; // spring knobs (`stiff`/`zeta`)
   let coastV = COAST;                // momentum kept entering SLOW (the `coast` field)
+  let baseTrackV = BASE_TRACK, leadRateV = LEAD_RATE; // co-moving setpoint knobs (`basetrk`/`leadrt`)
+  let mainSpeedV = MAIN_SETTLE_SPEED, mainTrackV = MAIN_TRACK_STIFF, // main algo knobs (`speed`/`track`/
+      mainAnchorV = MAIN_ANCHOR_STIFF, mainDampV = MAIN_DAMP_STIFF;  // `anchor`/`damp`) -- independent vars
   let velDropV = VEL_DROP, velRiseV = VEL_RISE, velSmoothV = VEL_DET_SMOOTH;
   let accSmoothV = ACC_SMOOTH;       // EMA factor for accel magnitude (debug-editable)
   let sjerkSmoothV = JERK_SMOOTH;    // EMA factor for signed jerk
@@ -696,47 +754,66 @@
   bindThreshold("zetaInput", SPRING_ZETA, (v) => { springZetaV = v; });
   bindThreshold("anchorStiffInput", ANCHOR_STIFF, (v) => { anchorV = v; });
   bindThreshold("coastInput", COAST, (v) => { coastV = v; });
+  bindThreshold("baseTrackInput", BASE_TRACK, (v) => { baseTrackV = v; });
+  bindThreshold("leadRateInput", LEAD_RATE, (v) => { leadRateV = v; });
   bindThreshold("dropInput", VEL_DROP, (v) => { velDropV = v; });
   bindThreshold("riseInput", VEL_RISE, (v) => { velRiseV = v; });
   bindThreshold("vsmoothInput", VEL_DET_SMOOTH, (v) => { velSmoothV = v; });
 
-  // Spring presets, spanning the damping spectrum (c = 2*sqrt(stiff)*zeta):
-  //   Soft = overdamped (zeta ~1.1), smoothest, no overshoot, slow aim
-  //   Calm = critical (zeta 1.0), fastest approach with no overshoot
-  //   Snap = underdamped (zeta 0.7), lively with a predictive overshoot
-  const settlePresets = {
-    soft: { stiffInput: 1000, zetaInput: 1.1, anchorStiffInput: ANCHOR_STIFF },
-    calm: { stiffInput: 1600, zetaInput: 1.0, anchorStiffInput: ANCHOR_STIFF },
-    snap: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF },
+  // Main algorithm inputs (its own variables, independent from co-moving).
+  bindThreshold("mainSpeedInput", MAIN_SETTLE_SPEED, (v) => { mainSpeedV = v; });
+  bindThreshold("mainTrackInput", MAIN_TRACK_STIFF, (v) => { mainTrackV = v; });
+  bindThreshold("mainAnchorInput", MAIN_ANCHOR_STIFF, (v) => { mainAnchorV = v; });
+  bindThreshold("mainDampInput", MAIN_DAMP_STIFF, (v) => { mainDampV = v; });
+
+  // Per-algorithm presets. Each group owns its own buttons (data-group), inputs,
+  // and preset table -- no values are shared between algorithms.
+  //   Co-moving: spanning the damping spectrum (c = 2*sqrt(stiff)*zeta); each is a
+  //   FULL config (spring + lead + setpoint knobs) so switching is clean. "Main"
+  //   here emulates main's feel within the co-moving algo (basetrk 1, leadrt 10,
+  //   coast 0, drop/rise 0 -> gate defeated, flicker and all).
+  //   Main: main's own Soft/Calm/Snap over speed/track/anchor/damp.
+  const comovingPresets = {
+    soft: { stiffInput: 1000, zetaInput: 1.1, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
+    calm: { stiffInput: 1600, zetaInput: 1.0, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
+    snap: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
+    main: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0, riseInput: 0 },
   };
-  const presetBtns = document.querySelectorAll(".presets button[data-preset]");
-  const settleInputIds = ["stiffInput", "zetaInput", "anchorStiffInput"];
-  // Highlight the button whose preset matches the current inputs (none if a value
-  // was hand-tuned away from every preset).
-  function refreshPresetHighlight() {
-    presetBtns.forEach((btn) => {
-      const p = settlePresets[btn.dataset.preset];
-      const match = p && settleInputIds.every(
-        (id) => parseFloat(document.getElementById(id).value) === p[id]);
-      btn.classList.toggle("active", !!match);
-    });
-  }
-  presetBtns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const p = settlePresets[btn.dataset.preset];
+  const comovingInputIds = ["stiffInput", "zetaInput", "anchorStiffInput", "leadTimeInput", "coastInput", "baseTrackInput", "leadRateInput", "dropInput", "riseInput"];
+  const mainPresets = {
+    soft: { mainSpeedInput: 1.0, mainTrackInput: 1000, mainAnchorInput: 1, mainDampInput: 70 },
+    calm: { mainSpeedInput: 1.0, mainTrackInput: 1600, mainAnchorInput: 1, mainDampInput: 80 },
+    snap: { mainSpeedInput: 1.0, mainTrackInput: 2500, mainAnchorInput: 1, mainDampInput: 70 },
+  };
+  const mainInputIds = ["mainSpeedInput", "mainTrackInput", "mainAnchorInput", "mainDampInput"];
+  // Wire one preset group: highlight the button matching the current inputs, apply
+  // on click, and clear/re-light the highlight on any hand-edit.
+  function setupPresetGroup(group, presets, inputIds) {
+    const btns = document.querySelectorAll(`.presets[data-group="${group}"] button[data-preset]`);
+    function refresh() {
+      btns.forEach((btn) => {
+        const p = presets[btn.dataset.preset];
+        const match = p && inputIds.every(
+          (id) => parseFloat(document.getElementById(id).value) === p[id]);
+        btn.classList.toggle("active", !!match);
+      });
+    }
+    btns.forEach((btn) => btn.addEventListener("click", () => {
+      const p = presets[btn.dataset.preset];
       if (!p) return;
-      for (const id of settleInputIds) {
+      for (const id of inputIds) {
         const el = document.getElementById(id);
         el.value = p[id];
         el.dispatchEvent(new Event("input")); // reuse bindThreshold's listener to update the *V var
       }
-      refreshPresetHighlight();
-    });
-  });
-  // Clear/re-light the highlight whenever a settle input is hand-edited.
-  settleInputIds.forEach((id) =>
-    document.getElementById(id).addEventListener("input", refreshPresetHighlight));
-  refreshPresetHighlight(); // light the preset that matches the seeded defaults
+      refresh();
+    }));
+    inputIds.forEach((id) =>
+      document.getElementById(id).addEventListener("input", refresh));
+    refresh();
+  }
+  setupPresetGroup("comoving", comovingPresets, comovingInputIds);
+  setupPresetGroup("main", mainPresets, mainInputIds);
   bindThreshold("accSmoothInput", ACC_SMOOTH, (v) => { accSmoothV = v; });
   bindThreshold("sjerkSmoothInput", JERK_SMOOTH, (v) => { sjerkSmoothV = v; });
   bindThreshold("ajerkSmoothInput", ABSJERK_SMOOTH, (v) => { ajerkSmoothV = v; });
@@ -793,6 +870,10 @@
   let cur = [0, 0, 1];           // rendered (predicted) vector
   let curVel = [0, 0, 0];        // `cur` velocity, integrated by the settle spring (gives overshoot/coast)
   let wasFast = false;           // previous-frame gate state, to detect the FAST->SLOW edge
+  let springBase = [0, 0, 1];    // co-moving spring setpoint base: seeded to `cur` at the SLOW->FAST
+                                 // edge, then advanced by the motion each frame (no onset step)
+  let leadAcc = 0;               // lead angle baked into the moving setpoint, grown from 0 by
+                                 // accumulated motion toward the limited predAngle
   let measVec = [0, 0, 1];       // latest measured vector
 
   // Angular-velocity tracking, used to extrapolate `measVec` forward.
@@ -987,7 +1068,7 @@
       fmt: (v) => v.toFixed(2) },
     { label: "lead ms", get: () => leadTimeV * 1000,
       min: 0, max: 120, enabled: () => inertia, fmt: (v) => v.toFixed(0) },
-    { label: "lag ms",  get: () => (leadComp && inertia) ? 1000 * springLagSec() : 0,
+    { label: "lag ms",  get: () => (leadComp && inertia) ? 1000 * settleLagSec() : 0,
       min: 0, max: 120, enabled: () => leadComp && inertia, fmt: (v) => v.toFixed(0) },
     { label: "tgtDamp", get: () => dbg.targetDamp, min: 0, max: 1, fmt: (v) => v.toFixed(2) },
     { label: "damp",    get: () => dbg.damp,      min: 0, max: 1, fmt: (v) => v.toFixed(2) },
@@ -1123,11 +1204,13 @@
     }
   }
 
-  // Group delay (seconds) of the settle spring tracking a ramp: c/k = 2*zeta/sqrt(stiff)
-  // (same form as main's damp/track). Lead compensation pre-pays this so the displayed
-  // result lands the full lead ahead despite the spring's lag.
-  function springLagSec() {
-    return springStiffV > 0 ? 2 * springZetaV / Math.sqrt(springStiffV) : 0;
+  // Group delay (seconds) of the active settle algorithm tracking a ramp, which
+  // lead compensation pre-pays so the result lands the full lead ahead despite the
+  // spring's lag. Co-moving: c/k = 2*zeta/sqrt(stiff). Main: damp/track (its form).
+  function settleLagSec() {
+    if (settleMode === "main") return mainTrackV > 0 ? mainDampV / mainTrackV : 0;
+    if (settleMode === "comoving") return springStiffV > 0 ? 2 * springZetaV / Math.sqrt(springStiffV) : 0;
+    return 0;
   }
 
   // --- Render loop ------------------------------------------------------
@@ -1146,6 +1229,7 @@
       angSpeed = 0; angDecel = 0;
       detVel = 0; velPeak = 0; velValley = 0; settleFast = false; // reset detector to SLOW
       curVel[0] = curVel[1] = curVel[2] = 0; // and the spring-settle velocity
+      springBase = cur.slice(); leadAcc = 0; // and the co-moving setpoint
     }
 
     // Predict the orientation LEAD_MS ahead from angular velocity. (An
@@ -1156,8 +1240,8 @@
     // spring lags its target by c/k seconds, eating into the lead; if Lead
     // compensation is on, pre-pay that lag by extending the lead so the displayed
     // result lands the full lead ahead (borrowed from main's inertial settle).
-    let lead = leadTimeV;
-    if (leadComp && inertia) lead += springLagSec();
+    let lead = settleMode === "comoving" ? leadTimeV : LEAD_MS / 1000;
+    if (leadComp && inertia) lead += settleLagSec();
     let predAngle = angSpeed * lead;
     if (predAngle > MAX_LEAD_ANGLE) predAngle = MAX_LEAD_ANGLE;
     else if (predAngle < -MAX_LEAD_ANGLE) predAngle = -MAX_LEAD_ANGLE;
@@ -1221,41 +1305,72 @@
     // Target the prediction when on; otherwise the raw reading (pre-update).
     const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
 
-    // Inertial settle (velocity-coupled spring): while a movement builds/holds
-    // (FAST) `cur` is PACED by the motion's angular velocity (rotated by
-    // angSpeed*dt) so it tracks the rotation rate with no spring lag. On top of
-    // that, an always-on underdamped spring pulls `cur` toward the lead-predicted
-    // `target` and carries its own velocity (curVel) -> it overshoots/coasts like
-    // main's inertial settle; a weak anchor reels `cur` onto raw truth to kill
-    // drift. Once the detector flips SLOW the velocity-follow freezes on a dime,
-    // so `cur` settles under the spring instead of chasing the ringing reading.
+    // Inertial settle -- one of three selectable algorithms (settleMode):
+    //  - "original": settle off (inertia=false) -> the easing path in the final else.
+    //  - "main": the main branch's speed-gated spring (below).
+    //  - "comoving" (default): velocity-coupled spring on a CO-MOVING setpoint --
+    //    while a movement builds/holds (FAST) `cur` is PACED by the angular velocity
+    //    (rotated by angSpeed*dt). The strong spring chases a setpoint seeded to
+    //    `cur` at the SLOW->FAST edge and advanced by the same motion, with the lead
+    //    grown in from 0 by accumulated rotation, so there's no onset step/snap; a
+    //    weak anchor reels `cur` onto truth. When the detector flips SLOW the follow
+    //    freezes and `cur` settles under the anchor instead of chasing the reading.
     let driveDbg = 1, velDbg = 0, peakDbg = 0;
-    if (inertia && prediction) {
+    if (inertia && prediction && settleMode === "main") {
+      // Main-branch inertial settle: a speed-gated strong spring tracks the
+      // absolute led `target` while moving; as measured speed -> 0 the drive fades
+      // and `cur` coasts to rest under constant damping. A weak anchor kills drift.
+      // No velocity-follow and no FAST/SLOW gate -- its own independent variables.
+      let drive = angSpeed / mainSpeedV; // 1 while moving -> 0 at rest
+      if (drive > 1) drive = 1; else if (drive < 0) drive = 0;
+      driveDbg = drive; velDbg = detVel; peakDbg = velPeak;
+      const kTrack = mainTrackV * drive;
+      for (let i = 0; i < 3; i++) {
+        const accel = kTrack * (target[i] - cur[i])
+                    + mainAnchorV * (measVec[i] - cur[i])
+                    - mainDampV * curVel[i];
+        curVel[i] += accel * frameDt;
+        cur[i]    += curVel[i] * frameDt;
+      }
+    } else if (inertia && prediction) {
       driveDbg = settleFast ? 1 : 0;
       velDbg = detVel;
       peakDbg = velPeak;
 
-      if (settleFast) {            // velocity-follow: pace cur by the motion's rate
-        cur = rotateAround(cur, angAxis, angSpeed * frameDt);
+      if (settleFast) {
+        if (!wasFast) { springBase = cur.slice(); leadAcc = 0; } // snapshot at onset
+        // Advance the setpoint base with the motion, then bleed out the frozen
+        // onset gap (meas - base) toward truth so it can't accumulate over a long
+        // sweep -- slowly enough that it never snaps.
+        springBase = rotateAround(springBase, angAxis, angSpeed * frameDt);
+        for (let i = 0; i < 3; i++) springBase[i] += (measVec[i] - springBase[i]) * baseTrackV;
+        // Grow the lead at the motion's own rate (scaled by `leadrt`) until it
+        // reaches the limited predAngle: leadAcc is the rotation accumulated since
+        // onset, capped at the full lead. So the lead emerges from motion, no step.
+        leadAcc += angSpeed * leadRateV * frameDt;
+        if (Math.abs(leadAcc) > Math.abs(predAngle)) leadAcc = predAngle;
+        if (predAngle === 0) leadAcc = 0;
+        cur = rotateAround(cur, angAxis, angSpeed * frameDt); // velocity-follow
       } else if (wasFast) {
-        // Entering SLOW: shed most of the momentum the strong spring built chasing
-        // the shrinking lead (so it can't fling the dot far past truth), but keep
-        // a little (`coast`) so the dot glides gently through before the weak
-        // anchor settles it onto truth.
+        // Entering SLOW: shed most of the momentum the spring built (so it can't
+        // fling the dot far past truth), but keep a little (`coast`) so the dot
+        // glides gently through before the weak anchor settles it onto truth.
         curVel[0] *= coastV; curVel[1] *= coastV; curVel[2] *= coastV;
       }
       wasFast = settleFast;
 
-      // Spring settle. FAST: a strong spring pulls cur toward the led `target`
-      // (alongside the velocity-follow above) for tight, lead-carrying tracking.
-      // SLOW: the strong term is gated OFF, so only the weak `anchor` toward raw
-      // truth is left and cur settles to rest under it (main's behaviour). Damping
-      // is derived from whichever stiffness is active, so the damping ratio stays
-      // `zeta` in both states. Semi-implicit (symplectic) Euler.
-      const kStrong = settleFast ? springStiffV : 0; // led-target spring, gated off at SLOW
+      // The velocity-paced, lead-grown setpoint (no onset step -> no snap).
+      const moving = rotateAround(springBase, angAxis, leadAcc);
+
+      // Spring settle. FAST: the strong spring pulls cur toward the co-moving
+      // `moving` setpoint for springy, lead-carrying tracking. SLOW: the strong
+      // term is gated OFF, so only the weak `anchor` toward raw truth is left and
+      // cur settles to rest under it. Damping is derived from whichever stiffness
+      // is active, so the damping ratio stays `zeta`. Semi-implicit Euler.
+      const kStrong = settleFast ? springStiffV : 0;
       const c = 2 * Math.sqrt(kStrong + anchorV) * springZetaV;
       for (let i = 0; i < 3; i++) {
-        const accel = kStrong * (target[i] - cur[i])
+        const accel = kStrong * (moving[i] - cur[i])
                     + anchorV * (measVec[i] - cur[i])
                     - c * curVel[i];
         curVel[i] += accel * frameDt;
