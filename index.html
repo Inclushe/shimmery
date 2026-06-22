@@ -16,6 +16,18 @@
   }
   canvas { display: block; width: 100vw; height: 100vh; }
 
+  /* HTML render mode: a DOM element per dot, recolored each frame, over a black
+     backdrop. An alternative to the canvas for devices where the high-dpr canvas
+     fill is the GPU bottleneck. */
+  #domGrid { position: fixed; inset: 0; display: none; background: #000000; overflow: hidden; pointer-events: none; }
+  #domGrid.show { display: block; }
+  .dom-dot { position: absolute; border-radius: 50%; transform: translate(-50%, -50%); }
+  #domDivider { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.6); display: none; }
+  #domGrid.demo #domDivider { display: block; }
+  .dom-label { position: absolute; top: 12px; font: 600 13px system-ui, -apple-system, sans-serif; color: rgba(255,255,255,0.7); white-space: nowrap; display: none; }
+  #domGrid.demo .dom-label { display: block; }
+  #domLabelRaw { transform: translateX(-100%); }
+
   /* Activation button — hidden by default; only shown if permission is denied
      or a user gesture is required (see the permission flow in the script). */
   #enable {
@@ -289,6 +301,11 @@
 </head>
 <body>
   <canvas id="c"></canvas>
+  <div id="domGrid">
+    <div id="domDivider"></div>
+    <div class="dom-label" id="domLabelRaw">RAW</div>
+    <div class="dom-label" id="domLabelPred">PREDICTED</div>
+  </div>
   <button id="enable">Tap to activate</button>
   <a id="fixLink" class="hidden" role="button" tabindex="0">Why? Fix it &rarr;</a>
   <div id="desktopMsg" class="hidden">
@@ -421,6 +438,14 @@
       </div>
       <div class="dpr-custom" id="dprCustomRow">
         <span>scale</span><input type="number" id="dprCustomInput" step="0.1" min="0.5" max="3" />
+      </div>
+    </div>
+
+    <div class="opt full" id="renderOpt">
+      <div class="group-label">Render</div>
+      <div id="renderToggle" class="seg" role="group" aria-label="Render mode">
+        <button type="button" class="seg-opt active" data-render="canvas">Canvas</button>
+        <button type="button" class="seg-opt" data-render="html">HTML</button>
       </div>
     </div>
 
@@ -651,9 +676,59 @@
   });
   updateDprDots();
 
-  // Size slider: dot radius in px. No grid rebuild needed.
+  // Render mode: "canvas" (default) draws dots on the 2D canvas; "html" positions
+  // one DOM element per dot and recolors them each frame. HTML sidesteps the
+  // high-dpr canvas fill that bottlenecks some phones, at the cost of DOM paint.
+  const domGrid = document.getElementById("domGrid");
+  const domDivider = document.getElementById("domDivider");
+  const domLabelRaw = document.getElementById("domLabelRaw");
+  const domLabelPred = document.getElementById("domLabelPred");
+  const renderToggle = document.getElementById("renderToggle");
+  const renderOpts = renderToggle.querySelectorAll(".seg-opt");
+  let renderMode = "canvas";
+  // (Re)build a DOM element per dot. Positions/sizes are set once here; frame()
+  // only updates each element's color (and only when it changes).
+  function buildDomGrid() {
+    domGrid.querySelectorAll(".dom-dot").forEach((n) => n.remove());
+    const frag = document.createDocumentFragment();
+    const s = dotRadius * 2 + "px";
+    for (let k = 0; k < dots.length; k++) {
+      const d = dots[k];
+      const el = document.createElement("div");
+      el.className = "dom-dot";
+      el.style.width = s; el.style.height = s;
+      el.style.left = d.x + "px";
+      el.style.top = d.y + "px";
+      d.el = el; d._g = -1; // -1 forces the first color write
+      frag.appendChild(el);
+    }
+    domGrid.appendChild(frag);
+  }
+  function clearDomGrid() {
+    domGrid.querySelectorAll(".dom-dot").forEach((n) => n.remove());
+    for (let k = 0; k < dots.length; k++) dots[k].el = null;
+  }
+  // Resize existing dot elements when the size slider changes (HTML mode only).
+  function applyDotSize() {
+    if (renderMode !== "html") return;
+    const s = dotRadius * 2 + "px";
+    for (let k = 0; k < dots.length; k++) {
+      if (dots[k].el) { dots[k].el.style.width = s; dots[k].el.style.height = s; }
+    }
+  }
+  function setRenderMode(mode) {
+    renderMode = mode;
+    renderOpts.forEach((o) => o.classList.toggle("active", o.dataset.render === mode));
+    const html = mode === "html";
+    domGrid.classList.toggle("show", html);
+    canvas.style.display = html ? "none" : "block";
+    if (html) buildDomGrid(); else clearDomGrid();
+  }
+  renderOpts.forEach((o) => o.addEventListener("click", () => setRenderMode(o.dataset.render)));
+
+  // Size slider: dot radius in px. Canvas reads it per-frame; HTML resizes elements.
   const sizeSlider = document.getElementById("sizeSlider");
-  sizeSlider.addEventListener("input", () => { dotRadius = +sizeSlider.value; });
+  sizeSlider.addEventListener("input", () => { dotRadius = +sizeSlider.value; applyDotSize(); });
 
   // Info modal open/close.
   const infoModal = document.getElementById("infoModal");
@@ -933,6 +1008,7 @@
         });
       }
     }
+    if (renderMode === "html") buildDomGrid(); // rebuild DOM dots for the new grid
   }
 
   // --- Orientation -> direction vector ----------------------------------
@@ -1472,17 +1548,26 @@
     const rlen = Math.hypot(measVec[0], measVec[1], measVec[2]) || 1;
     const rvx = measVec[0] / rlen, rvy = measVec[1] / rlen, rvz = measVec[2] / rlen;
     const splitX = W / 2;
+    const useHtml = renderMode === "html";
 
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(0, 0, W, H);
+    if (!useHtml) {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, W, H);
+    }
 
-    // Keep the canvas blank until the first orientation reading arrives, so the
+    // Keep the grid blank until the first orientation reading arrives, so the
     // dots don't flash at the default orientation on load.
     for (let k = 0; hasData && k < dots.length; k++) {
       const d = dots[k];
       // Demo mode: drop dots that straddle the divider so the two sides read clean.
-      if (demoMode && Math.abs(d.x - splitX) <= dotRadius + 0.5) continue;
+      const straddle = demoMode && Math.abs(d.x - splitX) <= dotRadius + 0.5;
+      if (useHtml) {
+        if (straddle) { if (d.el && d.el.style.display !== "none") d.el.style.display = "none"; continue; }
+        if (d.el && d.el.style.display === "none") d.el.style.display = "";
+      } else if (straddle) {
+        continue;
+      }
       const t = d.target;
       // Demo mode: dots left of the divider read the raw sensor vector, dots to the
       // right read the predicted vector. Otherwise everything uses the predicted one.
@@ -1501,14 +1586,26 @@
       const close = Math.max(closeA, closeB);
       const g = Math.round(BASE_GRAY + (255 - BASE_GRAY) * (close * close));
 
-      ctx.fillStyle = "rgb(" + g + "," + g + "," + g + ")";
-      ctx.beginPath();
-      ctx.arc(d.x, d.y, dotRadius, 0, Math.PI * 2);
-      ctx.fill();
+      if (useHtml) {
+        // Only touch the DOM when the color actually changes (cheap when still).
+        if (d.el && g !== d._g) { d.el.style.backgroundColor = "rgb(" + g + "," + g + "," + g + ")"; d._g = g; }
+      } else {
+        ctx.fillStyle = "rgb(" + g + "," + g + "," + g + ")";
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, dotRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     // Demo mode divider + side labels (drawn over the dots).
-    if (demoMode && hasData) {
+    if (useHtml) {
+      domGrid.classList.toggle("demo", demoMode && hasData);
+      if (demoMode && hasData) {
+        domDivider.style.left = splitX + "px";
+        domLabelRaw.style.left = (splitX - 12) + "px";
+        domLabelPred.style.left = (splitX + 12) + "px";
+      }
+    } else if (demoMode && hasData) {
       ctx.strokeStyle = "rgba(255,255,255,0.6)";
       ctx.lineWidth = 1;
       ctx.beginPath();
