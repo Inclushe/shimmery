@@ -120,6 +120,16 @@
     transition: background .15s ease, color .15s ease;
   }
   .seg .seg-opt.active { background: #fff; color: #14161e; }
+  /* Resolution control: indicator dot (auto's resolved choice) + custom-scale row. */
+  .dpr-dot { display: none; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: #5b9bff; vertical-align: middle; }
+  .dpr-dot.show { display: inline-block; }
+  .dpr-custom { display: none; gap: 8px; margin: 6px 0 0 14px; align-items: center; }
+  .dpr-custom.show { display: flex; }
+  .dpr-custom span { font-size: 11px; color: rgba(255,255,255,0.5); }
+  .dpr-custom input[type="number"] {
+    width: 6ch; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px; color: #fff; font-size: 12px; padding: 4px 6px;
+  }
   /* Only the selected settle algorithm's options/presets are shown. */
   .settle-panel { display: none; }
   .settle-panel.active { display: block; }
@@ -401,6 +411,19 @@
     </div>
     </div>
 
+    <div class="opt full" id="dprOpt">
+      <div class="group-label">Resolution</div>
+      <div id="dprToggle" class="seg" role="group" aria-label="Canvas resolution">
+        <button type="button" class="seg-opt active" data-dpr="auto">Auto</button>
+        <button type="button" class="seg-opt" data-dpr="1">1<span class="dpr-dot" id="dprDot1"></span></button>
+        <button type="button" class="seg-opt" data-dpr="device">Device<span class="dpr-dot" id="dprDotDevice"></span></button>
+        <button type="button" class="seg-opt" data-dpr="custom">Custom</button>
+      </div>
+      <div class="dpr-custom" id="dprCustomRow">
+        <span>scale</span><input type="number" id="dprCustomInput" step="0.1" min="0.5" max="3" />
+      </div>
+    </div>
+
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
     <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
   </div>
@@ -581,6 +604,52 @@
     densityDivisor = +densitySlider.value;
     buildGrid();
   });
+
+  // Canvas resolution (devicePixelRatio). On phones the canvas backing store is
+  // usually the GPU bottleneck: at full dpr a Pixel 6a paints a ~3x-scaled canvas
+  // that blows past the 16.6ms/60fps budget even when frame logic is ~1ms.
+  //   1      -> dpr 1 (sharpest perf win)
+  //   device -> the native dpr, capped at 2.5
+  //   custom -> a user-entered scale
+  //   auto   -> probe fps for ~1s after the first reading; if it can't hold ~60fps
+  //             at the device dpr, fall back to 1, else use the device dpr.
+  const DEVICE_DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  let dprMode = "auto";          // "auto" | "1" | "device" | "custom"
+  let dprCustom = 1.5;
+  let autoDpr = DEVICE_DPR;      // what Auto resolves to (DEVICE_DPR until the probe decides)
+  let autoResolved = false;      // true once the 1s probe has finished
+  let autoProbeStart = 0, autoProbeFrames = 0;
+  function effectiveDpr() {
+    if (dprMode === "1") return 1;
+    if (dprMode === "device") return DEVICE_DPR;
+    if (dprMode === "custom") return dprCustom;
+    return autoDpr; // "auto"
+  }
+  const dprToggle = document.getElementById("dprToggle");
+  const dprOpts = dprToggle.querySelectorAll(".seg-opt");
+  const dprCustomRow = document.getElementById("dprCustomRow");
+  const dprCustomInput = document.getElementById("dprCustomInput");
+  const dprDot1 = document.getElementById("dprDot1");
+  const dprDotDevice = document.getElementById("dprDotDevice");
+  dprCustomInput.value = dprCustom;
+  // In Auto mode, mark which resolution Auto is currently using (1 or device).
+  function updateDprDots() {
+    dprDot1.classList.toggle("show", dprMode === "auto" && autoDpr === 1);
+    dprDotDevice.classList.toggle("show", dprMode === "auto" && autoDpr !== 1);
+  }
+  function setDprMode(mode) {
+    dprMode = mode;
+    dprOpts.forEach((o) => o.classList.toggle("active", o.dataset.dpr === mode));
+    dprCustomRow.classList.toggle("show", mode === "custom");
+    updateDprDots();
+    applyResolution();
+  }
+  dprOpts.forEach((o) => o.addEventListener("click", () => setDprMode(o.dataset.dpr)));
+  dprCustomInput.addEventListener("input", () => {
+    const v = parseFloat(dprCustomInput.value);
+    if (!isNaN(v) && v > 0) { dprCustom = v; if (dprMode === "custom") applyResolution(); }
+  });
+  updateDprDots();
 
   // Size slider: dot radius in px. No grid rebuild needed.
   const sizeSlider = document.getElementById("sizeSlider");
@@ -832,15 +901,22 @@
     return [r * Math.cos(theta), r * Math.sin(theta), z];
   }
 
-  function buildGrid() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    W = window.innerWidth;
-    H = window.innerHeight;
+  // Size the canvas backing store to the current W/H and effective dpr. Kept
+  // separate from buildGrid so a resolution change can resize the canvas without
+  // rebuilding (and reshuffling) the dot grid.
+  function applyResolution() {
+    dpr = effectiveDpr();
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function buildGrid() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    applyResolution();
 
     // Density scales with screen size; aim for a tight dotted texture.
     spacing = Math.max(6, Math.min(W, H) / densityDivisor);
@@ -1216,6 +1292,24 @@
     if (now - lastFpsShown > 250) {
       fpsTag.textContent = dbg.fps.toFixed(0) + " fps";
       lastFpsShown = now;
+    }
+
+    // Auto-resolution probe: over the first ~1s of real orientation data, count
+    // frames to measure the achievable rate. If it can't sustain ~60fps at the
+    // device dpr, Auto falls back to dpr 1 (the canvas is the GPU bottleneck).
+    if (hasData && !autoResolved) {
+      if (autoProbeStart === 0) { autoProbeStart = now; autoProbeFrames = 0; }
+      else {
+        autoProbeFrames++;
+        const elapsed = now - autoProbeStart;
+        if (elapsed >= 1000) {
+          const probedFps = autoProbeFrames / (elapsed / 1000);
+          autoDpr = probedFps < 58 ? 1 : DEVICE_DPR;
+          autoResolved = true;
+          updateDprDots();
+          if (dprMode === "auto" && dpr !== autoDpr) applyResolution();
+        }
+      }
     }
 
     // If readings have stopped arriving (device held still), relax the
