@@ -766,13 +766,14 @@
   //   Co-moving: each is a FULL config (spring + lead + setpoint knobs) so
   //   switching is clean. "Snap" is the co-moving default; "Spring" emulates the
   //   Spring algo's feel (basetrk 1, leadrt 10, coast 0, drop/rise 0 -> gate
-  //   defeated, flicker and all); "Gated" is Spring but with drop 0.9, so the
-  //   FAST/SLOW gate stays active and sensitive instead of being defeated.
+  //   defeated, flicker and all); "Gated" is the springy feel (stiff 2500, zeta
+  //   0.7) with the gate active (drop 0.9) and a genuinely co-moving base
+  //   (basetrk 0.05) so it doesn't snap to raw on a SLOW->FAST flip.
   //   Spring: the Spring algo's own Soft/Calm/Snap over speed/track/anchor/damp.
   const comovingPresets = {
     snap: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
     spring: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0, riseInput: 0 },
-    gated: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0.9, riseInput: 0 },
+    gated: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 0.05, leadRateInput: 10, dropInput: 0.9, riseInput: 0 },
   };
   const comovingInputIds = ["stiffInput", "zetaInput", "anchorStiffInput", "leadTimeInput", "coastInput", "baseTrackInput", "leadRateInput", "dropInput", "riseInput"];
   const springPresets = {
@@ -1324,11 +1325,12 @@
 
       if (settleFast) {
         if (!wasFast) { springBase = cur.slice(); leadAcc = 0; } // snapshot at onset
-        // Advance the setpoint base with the motion, then bleed out the frozen
-        // onset gap (meas - base) toward truth so it can't accumulate over a long
-        // sweep -- slowly enough that it never snaps.
+        // Advance the setpoint base with the motion, then bleed the onset gap
+        // (meas - base) toward truth so it can't accumulate over a long sweep.
+        // Skip the bleed on the onset frame -- otherwise it would overwrite the
+        // springBase = cur snapshot above and snap cur to raw on a SLOW->FAST flip.
         springBase = rotateAround(springBase, angAxis, angSpeed * frameDt);
-        for (let i = 0; i < 3; i++) springBase[i] += (measVec[i] - springBase[i]) * baseTrackV;
+        if (wasFast) for (let i = 0; i < 3; i++) springBase[i] += (measVec[i] - springBase[i]) * baseTrackV;
         // Grow the lead at the motion's own rate (scaled by `leadrt`) until it
         // reaches the limited predAngle: leadAcc is the rotation accumulated since
         // onset, capped at the full lead. So the lead emerges from motion, no step.
