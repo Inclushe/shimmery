@@ -384,6 +384,7 @@
           <button type="button" data-preset="calm">Calm</button>
           <button type="button" data-preset="snap">Snap</button>
           <button type="button" data-preset="spring">Spring</button>
+          <button type="button" data-preset="gated">Gated</button>
         </div>
       </div>
     </div>
@@ -764,16 +765,16 @@
 
   // Per-algorithm presets. Each group owns its own buttons (data-group), inputs,
   // and preset table -- no values are shared between algorithms.
-  //   Co-moving: spanning the damping spectrum (c = 2*sqrt(stiff)*zeta); each is a
-  //   FULL config (spring + lead + setpoint knobs) so switching is clean. "Spring"
-  //   here emulates the Spring algo's feel within the co-moving algo (basetrk 1, leadrt 10,
-  //   coast 0, drop/rise 0 -> gate defeated, flicker and all).
+  //   Co-moving: each is a FULL config (spring + lead + setpoint knobs) so
+  //   switching is clean. "Snap" is the co-moving default; "Spring" emulates the
+  //   Spring algo's feel (basetrk 1, leadrt 10, coast 0, drop/rise 0 -> gate
+  //   defeated, flicker and all); "Gated" is Spring but with drop 0.9, so the
+  //   FAST/SLOW gate stays active and sensitive instead of being defeated.
   //   Spring: the Spring algo's own Soft/Calm/Snap over speed/track/anchor/damp.
   const comovingPresets = {
-    soft: { stiffInput: 1000, zetaInput: 1.1, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
-    calm: { stiffInput: 1600, zetaInput: 1.0, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
     snap: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
     spring: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0, riseInput: 0 },
+    gated: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0.9, riseInput: 0 },
   };
   const comovingInputIds = ["stiffInput", "zetaInput", "anchorStiffInput", "leadTimeInput", "coastInput", "baseTrackInput", "leadRateInput", "dropInput", "riseInput"];
   const springPresets = {
