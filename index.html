@@ -816,11 +816,11 @@
   //   defeated, flicker and all).
   //   Spring: the Spring algo's own Soft/Calm/Snap over speed/track/anchor/damp.
   const comovingPresets = {
-    snap: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
-    spring: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0, riseInput: 0 },
-    gated: { stiffInput: 2500, zetaInput: 0.5, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 0.05, leadRateInput: 10, dropInput: 0.9, riseInput: 0 },
+    snap: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE, vsmoothInput: VEL_DET_SMOOTH },
+    spring: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0, riseInput: 0, vsmoothInput: VEL_DET_SMOOTH },
+    gated: { stiffInput: 2500, zetaInput: 0.5, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 0.05, leadRateInput: 10, dropInput: 0.9, riseInput: 0, vsmoothInput: 0.5 },
   };
-  const comovingInputIds = ["stiffInput", "zetaInput", "anchorStiffInput", "leadTimeInput", "coastInput", "baseTrackInput", "leadRateInput", "dropInput", "riseInput"];
+  const comovingInputIds = ["stiffInput", "zetaInput", "anchorStiffInput", "leadTimeInput", "coastInput", "baseTrackInput", "leadRateInput", "dropInput", "riseInput", "vsmoothInput"];
   const springPresets = {
     soft: { springSpeedInput: 1.0, springTrackInput: 1000, springAnchorInput: 1, springDampInput: 70 },
     calm: { springSpeedInput: 1.0, springTrackInput: 1600, springAnchorInput: 1, springDampInput: 80 },
