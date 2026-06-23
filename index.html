@@ -68,6 +68,7 @@
     padding-right: 4px; /* room for the scrollbar so it doesn't cover toggles */
   }
   #toggles .opt { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  #toggles .opt.hidden { display: none; }
   #toggles .full { grid-column: 1 / -1; }
   #toggles .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; align-self: start; }
   #toggles .group-label {
@@ -339,7 +340,7 @@
         <div class="field"><span>rel ms</span><input type="number" id="decelRelInput" step="50" /></div>
       </div>
     </div>
-    <div class="opt">
+    <div class="opt" id="dropLimOpt">
       <label><input type="checkbox" id="dropLimCheck" checked /> Drop limiter<button type="button" class="glide-btn" id="dropGlideBtn">glide</button></label>
       <div class="thresh limiter">
         <div class="field"><span>low</span><input type="number" id="dropLowInput" step="0.1" /></div>
@@ -397,7 +398,7 @@
         </div>
       </div>
     </div>
-    <div class="opt">
+    <div class="opt" id="leadCompOpt">
       <label><input type="checkbox" id="leadCompCheck" checked /> Lead compensation</label>
     </div>
     <div class="opt">
@@ -539,6 +540,8 @@
   // "Velocity" turns the settle off (plain predicted easing); "Spring" and
   // "Co-moving" run two independent algorithms, each with its own options panel.
   const settleToggle = document.getElementById("settleToggle");
+  const leadCompOpt = document.getElementById("leadCompOpt");
+  const dropLimOpt = document.getElementById("dropLimOpt");
   const settleOptBlock = document.getElementById("settleOpt");
   const settleOpts = settleToggle.querySelectorAll(".seg-opt");
   const settlePanels = settleOptBlock.querySelectorAll(".settle-panel");
@@ -547,9 +550,14 @@
     inertia = mode !== "velocity"; // Velocity = settle off
     settleOpts.forEach((o) => o.classList.toggle("active", o.dataset.settle === mode));
     settlePanels.forEach((p) => p.classList.toggle("active", p.dataset.settle === mode));
+    // Lead compensation applies to any inertial settle (Spring/Co-moving); the
+    // Drop limiter is a co-moving-only control. Hide them when not in use.
+    leadCompOpt.classList.toggle("hidden", mode === "velocity");
+    dropLimOpt.classList.toggle("hidden", mode !== "comoving");
   }
   settleOpts.forEach((o) =>
     o.addEventListener("click", () => { if (!o.disabled) setSettleMode(o.dataset.settle); }));
+  setSettleMode(settleMode); // apply initial show/hide for the active algorithm
   // Orientation mode is a 3-way segmented switch: "raw" (sensor as-is), "demo"
   // (split canvas: raw left, predicted right), and "predicted". Demo and Predicted
   // both run the prediction pipeline, so the prediction-only controls stay enabled
