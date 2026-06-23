@@ -89,7 +89,7 @@
   /* Always-on fps readout pinned to the trailing edge of the Debug label. */
   .fps-tag { margin-left: auto; font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.55); font-variant-numeric: tabular-nums; }
   #densityRow, #sizeRow { gap: 10px; }
-  #densityRow input[type="range"], #sizeRow input[type="range"] { width: 110px; accent-color: #fff; cursor: pointer; }
+  #densityRow input[type="range"], #sizeRow input[type="range"] { flex: 1; min-width: 0; accent-color: #fff; cursor: pointer; }
 
   /* Disabled toggles in Raw Sensor mode */
   #toggles label.disabled { opacity: 0.4; cursor: not-allowed; }
@@ -357,11 +357,11 @@
       <div class="group-label">Algorithm</div>
     <div class="opt" id="settleOpt">
       <div id="settleToggle" class="seg" role="group" aria-label="Inertial settle algorithm">
-        <button type="button" class="seg-opt active" data-settle="original">Original</button>
+        <button type="button" class="seg-opt active" data-settle="velocity">Velocity</button>
         <button type="button" class="seg-opt" data-settle="spring">Spring</button>
         <button type="button" class="seg-opt" data-settle="comoving">Co-moving</button>
       </div>
-      <!-- Original = inertial settle off (plain predicted easing); it has no options. -->
+      <!-- Velocity = inertial settle off (plain predicted easing); it has no options. -->
       <!-- Spring: the main-branch speed-gated spring (its own variables). -->
       <div class="settle-panel" data-settle="spring">
         <div class="thresh">
@@ -412,7 +412,7 @@
     </div>
 
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
-    <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
+    <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="6" /></label>
   </div>
 
   <div id="debug" class="hidden" aria-hidden="true"></div>
@@ -488,8 +488,8 @@
   let decelLimiter = false;   // idea 1: damp prediction during abrupt deceleration
   let angAccelLimiter = false; // damp prediction during abrupt rotation onset (off: it opposes snappy onset)
   let dropLimiter = true;     // ramp the co-moving gate's drop with peak speed (off: static drop field)
-  let inertia = false;      // settle active (false only for the "Original" algorithm); derived from settleMode
-  let settleMode = "original"; // which inertial settle algorithm: "original" | "spring" | "comoving"
+  let inertia = false;      // settle active (false only for the "Velocity" algorithm); derived from settleMode
+  let settleMode = "velocity"; // which inertial settle algorithm: "velocity" | "spring" | "comoving"
   let leadComp = true;     // pre-pay the spring's c/k group delay by extending the lead (borrowed from main)
   // Per-limiter glide enables (default on, except the drop limiter).
   let accGlide = true, ajerkGlide = true,
@@ -536,7 +536,7 @@
     { box: smoothCheck, set: (v) => { smoothing = v; } },
   ];
   // Inertial settle algorithm switch (segmented, like the Raw/Predicted toggle):
-  // "Original" turns the settle off (plain predicted easing); "Spring" and
+  // "Velocity" turns the settle off (plain predicted easing); "Spring" and
   // "Co-moving" run two independent algorithms, each with its own options panel.
   const settleToggle = document.getElementById("settleToggle");
   const settleOptBlock = document.getElementById("settleOpt");
@@ -544,7 +544,7 @@
   const settlePanels = settleOptBlock.querySelectorAll(".settle-panel");
   function setSettleMode(mode) {
     settleMode = mode;
-    inertia = mode !== "original"; // Original = settle off
+    inertia = mode !== "velocity"; // Velocity = settle off
     settleOpts.forEach((o) => o.classList.toggle("active", o.dataset.settle === mode));
     settlePanels.forEach((p) => p.classList.toggle("active", p.dataset.settle === mode));
   }
@@ -615,7 +615,7 @@
   fixModal.addEventListener("click", (e) => { if (e.target === fixModal) fixModal.classList.add("hidden"); });
 
   // --- Tunables ---------------------------------------------------------
-  let dotRadius = 1;             // dot radius in px; set by the size slider
+  let dotRadius = 6;             // dot radius in px; set by the size slider
   const SPOT = 0.85;             // angular radius (radians) of the "lit" zone
   const BASE_GRAY = 32;          // brightness of a far-away dot (0-255)
 
@@ -1349,7 +1349,7 @@
     const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
 
     // Inertial settle -- one of three selectable algorithms (settleMode):
-    //  - "original": settle off (inertia=false) -> the easing path in the final else.
+    //  - "velocity": settle off (inertia=false) -> the easing path in the final else.
     //  - "spring": the main branch's speed-gated spring (below).
     //  - "comoving" (default): velocity-coupled spring on a CO-MOVING setpoint --
     //    while a movement builds/holds (FAST) `cur` is PACED by the angular velocity
@@ -1421,7 +1421,7 @@
         cur[i]    += curVel[i] * frameDt;
       }
     } else {
-      // Original easing path (prediction off, or inertial settle disabled).
+      // Velocity easing path (prediction off, or inertial settle disabled).
       // Ease toward the target; snap if smoothing is off. With prediction off
       // we use the original 0.15 easing so the comparison is faithful.
       let kSmooth = prediction ? (debugOn ? curSmoothV : CUR_SMOOTH) : OLD_SMOOTH;
