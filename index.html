@@ -140,6 +140,12 @@
     font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   .thresh.limiter input[type="number"] { width: 5ch; }
+  .thresh select {
+    padding: 4px 6px;
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 8px;
+    background: rgba(20,22,30,0.6); color: #fff;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
   .thresh .break { flex-basis: 100%; height: 0; }
   /* Glide on/off, a pill toggle living at the right of a limiter's main label.
      Styled like the inertial-settle presets; revealed only in debug mode. */
@@ -342,6 +348,12 @@
     <div class="opt">
       <label><input type="checkbox" id="dropLimCheck" /> Drop limiter<button type="button" class="glide-btn" id="dropGlideBtn">glide</button></label>
       <div class="thresh limiter">
+        <div class="field"><span>src</span><select id="dropSrcInput">
+          <option value="peak">peak vel</option>
+          <option value="vel">vel</option>
+          <option value="angvel">ang vel</option>
+          <option value="jerk">jerk</option>
+        </select></div>
         <div class="field"><span>low</span><input type="number" id="dropLowInput" step="0.1" /></div>
         <div class="field"><span>high</span><input type="number" id="dropHighInput" step="0.1" /></div>
         <div class="field"><span>min</span><input type="number" id="dropMinInput" step="0.05" min="0" max="1" /></div>
@@ -722,6 +734,7 @@
         decelGl = { v: 1 }, angAccGl = { v: 1 };
   const dropGl = { v: VEL_DROP };    // glide state for the drop limiter
   let dropEff = VEL_DROP;            // current gate drop fraction (limiter output or static)
+  let dropSrc = "peak";              // drop limiter input signal: "peak"|"vel"|"angvel"|"jerk"
   let curSmoothV = CUR_SMOOTH;
   let leadTimeV = LEAD_MS / 1000,    // seconds; predictive lead time (the `lead ms` field)
       anchorV = ANCHOR_STIFF;        // 1/s^2; weak spring toward raw truth (the `anchor` field)
@@ -780,6 +793,9 @@
   bindThreshold("dropMaxInput", DROP_MAX, (v) => { dropMaxV = v; });
   bindThreshold("dropAtkInput", GLIDE_ATTACK_MS, (v) => { dropAtkV = v; });
   bindThreshold("dropRelInput", GLIDE_RELEASE_MS, (v) => { dropRelV = v; });
+  const dropSrcInput = document.getElementById("dropSrcInput");
+  dropSrcInput.value = dropSrc;
+  dropSrcInput.addEventListener("change", () => { dropSrc = dropSrcInput.value; });
   bindThreshold("leadTimeInput", LEAD_MS, (v) => { leadTimeV = v / 1000; }); // ms -> s
   bindThreshold("stiffInput", SPRING_STIFF, (v) => { springStiffV = v; });
   bindThreshold("zetaInput", SPRING_ZETA, (v) => { springZetaV = v; });
@@ -1320,13 +1336,19 @@
     const decelG  = glide(decelGl,  decelDamp,  decelGlide,  decelAtkV,  decelRelV,  dtMs, true);
     const angAccG = glide(angAccGl, angAccDamp, angAccGlide, angAccAtkV, angAccRelV, dtMs, true);
 
-    // Drop limiter: ramp the co-moving gate's drop fraction up with the motion's
-    // PEAK speed (velPeak) so slow motions stay springy and fast ones clamp at the
-    // tail. Off -> the static drop field. The gate (in ingestVector) reads dropEff.
-    // "attack" here is the value RISING toward more clamping (attackLower=false).
+    // Drop limiter: ramp the co-moving gate's drop fraction up with a chosen input
+    // signal so slow motions stay springy and fast ones clamp at the tail. Off ->
+    // the static drop field. The gate (in ingestVector) reads dropEff. "attack"
+    // here is the value RISING toward more clamping (attackLower=false). The source
+    // is debug-selectable: peak detector velocity (clamps at a fast motion's tail),
+    // the live detector velocity (the `vel` bar), raw angular velocity, or jerk.
+    const dropSig = dropSrc === "vel" ? detVel
+                  : dropSrc === "angvel" ? angSpeed
+                  : dropSrc === "jerk" ? absJerk
+                  : velPeak; // "peak"
     const dropLow = debugOn ? dropLowV : DROP_LOW;
     const dropHigh = debugOn ? dropHighV : DROP_HIGH;
-    let dropRamp = (velPeak - dropLow) / (dropHigh - dropLow);
+    let dropRamp = (dropSig - dropLow) / (dropHigh - dropLow);
     if (dropRamp < 0) dropRamp = 0; else if (dropRamp > 1) dropRamp = 1;
     const dropTarget = dropLimiter
       ? dropMinV + (dropMaxV - dropMinV) * dropRamp
