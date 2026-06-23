@@ -339,6 +339,17 @@
         <div class="field"><span>rel ms</span><input type="number" id="decelRelInput" step="50" /></div>
       </div>
     </div>
+    <div class="opt">
+      <label><input type="checkbox" id="dropLimCheck" /> Drop limiter<button type="button" class="glide-btn" id="dropGlideBtn">glide</button></label>
+      <div class="thresh limiter">
+        <div class="field"><span>low</span><input type="number" id="dropLowInput" step="0.1" /></div>
+        <div class="field"><span>high</span><input type="number" id="dropHighInput" step="0.1" /></div>
+        <div class="field"><span>min</span><input type="number" id="dropMinInput" step="0.05" min="0" max="1" /></div>
+        <div class="field"><span>max</span><input type="number" id="dropMaxInput" step="0.05" min="0" max="1" /></div>
+        <div class="field"><span>atk ms</span><input type="number" id="dropAtkInput" step="50" /></div>
+        <div class="field"><span>rel ms</span><input type="number" id="dropRelInput" step="50" /></div>
+      </div>
+    </div>
     </div>
 
     <!-- Right column: prediction algorithm behaviour. -->
@@ -451,6 +462,7 @@
   const ajerkCheck = document.getElementById("ajerkCheck");
   const decelCheck = document.getElementById("decelCheck");
   const angAccelCheck = document.getElementById("angAccelCheck");
+  const dropLimCheck = document.getElementById("dropLimCheck");
   const leadCompCheck = document.getElementById("leadCompCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
@@ -475,17 +487,19 @@
   let absJerkLimiter = true;
   let decelLimiter = false;   // idea 1: damp prediction during abrupt deceleration
   let angAccelLimiter = false; // damp prediction during abrupt rotation onset (off: it opposes snappy onset)
+  let dropLimiter = false;    // ramp the co-moving gate's drop with peak speed (off: static drop field)
   let inertia = false;      // settle active (false only for the "Original" algorithm); derived from settleMode
   let settleMode = "original"; // which inertial settle algorithm: "original" | "spring" | "comoving"
   let leadComp = true;     // pre-pay the spring's c/k group delay by extending the lead (borrowed from main)
-  // Per-limiter glide enables (default on).
+  // Per-limiter glide enables (default on, except the drop limiter).
   let accGlide = true, ajerkGlide = true,
-      decelGlide = true, angAccGlide = true;
+      decelGlide = true, angAccGlide = true, dropGlide = false;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   accelCheck.addEventListener("change", () => { accelLimiter = accelCheck.checked; });
   ajerkCheck.addEventListener("change", () => { absJerkLimiter = ajerkCheck.checked; });
   decelCheck.addEventListener("change", () => { decelLimiter = decelCheck.checked; });
   angAccelCheck.addEventListener("change", () => { angAccelLimiter = angAccelCheck.checked; });
+  dropLimCheck.addEventListener("change", () => { dropLimiter = dropLimCheck.checked; });
   leadCompCheck.addEventListener("change", () => { leadComp = leadCompCheck.checked; });
   // Glide pill toggles (one per limiter + dynamic speed): flip the .active class
   // and the backing flag on click. Seeded active in the markup (all default on).
@@ -503,6 +517,7 @@
   bindGlideBtn("ajerkGlideBtn", (v) => { ajerkGlide = v; });
   bindGlideBtn("decelGlideBtn", (v) => { decelGlide = v; });
   bindGlideBtn("angAccGlideBtn", (v) => { angAccGlide = v; });
+  bindGlideBtn("dropGlideBtn", (v) => { dropGlide = v; });
 
   // Orientation mode: segmented "Raw Sensor" / "Predicted" toggle. In Raw
   // Sensor mode the prediction is off and every prediction-related option is
@@ -516,6 +531,7 @@
     { box: ajerkCheck,  set: (v) => { absJerkLimiter = v; } },
     { box: decelCheck,  set: (v) => { decelLimiter = v; } },
     { box: angAccelCheck, set: (v) => { angAccelLimiter = v; } },
+    { box: dropLimCheck, set: (v) => { dropLimiter = v; } },
     { box: leadCompCheck, set: (v) => { leadComp = v; } },
     { box: smoothCheck, set: (v) => { smoothing = v; } },
   ];
@@ -677,6 +693,15 @@
   const VEL_DROP = 0.7;          // SLOW when detVel < peak * VEL_DROP
   const VEL_RISE = 0.3;          // rad/s; FAST when detVel > valley + VEL_RISE
 
+  // Drop limiter: instead of a fixed gate drop, ramp it up with the motion's PEAK
+  // speed so slow motions stay springy (drop -> DROP_MIN, gate never flips, full
+  // co-moving spring) while fast motions clamp at their tail (drop -> DROP_MAX,
+  // gate flips early into the deceleration). LOW/HIGH are peak-velocity thresholds.
+  const DROP_LOW = 1.0;          // rad/s; at/below this peak speed -> DROP_MIN (springy)
+  const DROP_HIGH = 4.0;         // rad/s; at/above this peak speed -> DROP_MAX (clamps)
+  const DROP_MIN = 0;            // gate drop fraction for slow motions
+  const DROP_MAX = 0.9;          // gate drop fraction for fast motions
+
   // Live, debug-editable copies of each limiter's LOW/HIGH band. Default to the
   // constants above; the number inputs (visible only in debug mode) update
   // these, and frame() uses them in place of the constants when debug is on.
@@ -684,14 +709,19 @@
   let ajerkLowV = ABSJERK_LOW, ajerkHighV = ABSJERK_HIGH;
   let decelLowV = DECEL_LOW, decelHighV = DECEL_HIGH;
   let angAccLowV = ANGACC_LOW, angAccHighV = ANGACC_HIGH;
+  let dropLowV = DROP_LOW, dropHighV = DROP_HIGH;   // drop limiter peak-velocity band
+  let dropMinV = DROP_MIN, dropMaxV = DROP_MAX;     // drop limiter output range
   // Per-limiter (and dynamic-speed) glide attack/release times (ms) plus the
   // gliding state each one carries. Seeded from the shared GLIDE_* defaults.
   let accAtkV = GLIDE_ATTACK_MS, accRelV = GLIDE_RELEASE_MS;
   let ajerkAtkV = GLIDE_ATTACK_MS, ajerkRelV = GLIDE_RELEASE_MS;
   let decelAtkV = GLIDE_ATTACK_MS, decelRelV = GLIDE_RELEASE_MS;
   let angAccAtkV = GLIDE_ATTACK_MS, angAccRelV = GLIDE_RELEASE_MS;
+  let dropAtkV = GLIDE_ATTACK_MS, dropRelV = GLIDE_RELEASE_MS;
   const accGl = { v: 1 }, ajerkGl = { v: 1 },
         decelGl = { v: 1 }, angAccGl = { v: 1 };
+  const dropGl = { v: VEL_DROP };    // glide state for the drop limiter
+  let dropEff = VEL_DROP;            // current gate drop fraction (limiter output or static)
   let curSmoothV = CUR_SMOOTH;
   let leadTimeV = LEAD_MS / 1000,    // seconds; predictive lead time (the `lead ms` field)
       anchorV = ANCHOR_STIFF;        // 1/s^2; weak spring toward raw truth (the `anchor` field)
@@ -744,6 +774,12 @@
   bindThreshold("decelHighInput", DECEL_HIGH, (v) => { decelHighV = v; });
   bindThreshold("angAccLowInput", ANGACC_LOW, (v) => { angAccLowV = v; });
   bindThreshold("angAccHighInput", ANGACC_HIGH, (v) => { angAccHighV = v; });
+  bindThreshold("dropLowInput", DROP_LOW, (v) => { dropLowV = v; });
+  bindThreshold("dropHighInput", DROP_HIGH, (v) => { dropHighV = v; });
+  bindThreshold("dropMinInput", DROP_MIN, (v) => { dropMinV = v; });
+  bindThreshold("dropMaxInput", DROP_MAX, (v) => { dropMaxV = v; });
+  bindThreshold("dropAtkInput", GLIDE_ATTACK_MS, (v) => { dropAtkV = v; });
+  bindThreshold("dropRelInput", GLIDE_RELEASE_MS, (v) => { dropRelV = v; });
   bindThreshold("leadTimeInput", LEAD_MS, (v) => { leadTimeV = v / 1000; }); // ms -> s
   bindThreshold("stiffInput", SPRING_STIFF, (v) => { springStiffV = v; });
   bindThreshold("zetaInput", SPRING_ZETA, (v) => { springZetaV = v; });
@@ -968,7 +1004,7 @@
         // Peak/valley state machine: FAST while gateVel climbs/holds at its peak;
         // SLOW once it falls below VEL_DROP of the peak (movement winding down,
         // latched to rest); re-arm FAST when it rises VEL_RISE above its valley.
-        const dropFrac = debugOn ? velDropV : VEL_DROP;
+        const dropFrac = dropEff; // static drop, or the drop limiter's ramped value
         const riseAbs = debugOn ? velRiseV : VEL_RISE;
         if (settleFast) {
           if (gateVel > velPeak) velPeak = gateVel;
@@ -1050,8 +1086,12 @@
     { label: "drive",   get: () => dbg.drive,     min: 0, max: 1, enabled: () => inertia, fmt: (v) => v.toFixed(2) },
     { label: "vel",     get: () => dbg.vel,       min: 0, max: 6, enabled: () => inertia,
       ticks: [{ at: () => dbg.peak, color: "#5bff9b" },
-              { at: () => dbg.peak * velDropV, color: "#ff9b3b", dashed: true }],
+              { at: () => dbg.peak * (dropLimiter ? dropEff : velDropV), color: "#ff9b3b", dashed: true }],
       color: () => settleFast ? "#5b9bff" : "rgba(255,255,255,0.4)",
+      fmt: (v) => v.toFixed(2) },
+    { label: "drop",    get: () => dropEff,       min: 0, max: 1, enabled: () => dropLimiter,
+      ticks: [{ at: () => dropMinV, color: "#ff9b3b", dashed: true }, { at: () => dropMaxV, color: "#ff5b5b" }],
+      color: (v) => v >= 0.6 ? "#ff5b5b" : (v >= 0.3 ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(2) },
     { label: "lead ms", get: () => leadTimeV * 1000,
       min: 0, max: 120, enabled: () => inertia, fmt: (v) => v.toFixed(0) },
@@ -1279,6 +1319,19 @@
     const aJerkG  = glide(ajerkGl,  aJerkDamp,  ajerkGlide,  ajerkAtkV,  ajerkRelV,  dtMs, true);
     const decelG  = glide(decelGl,  decelDamp,  decelGlide,  decelAtkV,  decelRelV,  dtMs, true);
     const angAccG = glide(angAccGl, angAccDamp, angAccGlide, angAccAtkV, angAccRelV, dtMs, true);
+
+    // Drop limiter: ramp the co-moving gate's drop fraction up with the motion's
+    // PEAK speed (velPeak) so slow motions stay springy and fast ones clamp at the
+    // tail. Off -> the static drop field. The gate (in ingestVector) reads dropEff.
+    // "attack" here is the value RISING toward more clamping (attackLower=false).
+    const dropLow = debugOn ? dropLowV : DROP_LOW;
+    const dropHigh = debugOn ? dropHighV : DROP_HIGH;
+    let dropRamp = (velPeak - dropLow) / (dropHigh - dropLow);
+    if (dropRamp < 0) dropRamp = 0; else if (dropRamp > 1) dropRamp = 1;
+    const dropTarget = dropLimiter
+      ? dropMinV + (dropMaxV - dropMinV) * dropRamp
+      : (debugOn ? velDropV : VEL_DROP);
+    dropEff = glide(dropGl, dropTarget, dropGlide, dropAtkV, dropRelV, dtMs, false);
 
     // targetDamp = raw product (tgtDamp bar); damp = glided product (applied).
     let targetDamp = 1, damp = 1;
