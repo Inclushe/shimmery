@@ -697,8 +697,8 @@
   // speed so slow motions stay springy (drop -> DROP_MIN, gate never flips, full
   // co-moving spring) while fast motions clamp at their tail (drop -> DROP_MAX,
   // gate flips early into the deceleration). LOW/HIGH are peak-velocity thresholds.
-  const DROP_LOW = 2.0;          // rad/s; at/below this peak speed -> DROP_MIN (springy)
-  const DROP_HIGH = 4.0;         // rad/s; at/above this peak speed -> DROP_MAX (clamps)
+  const DROP_LOW = 0.5;          // rad/s; at/below this peak speed -> DROP_MIN (springy)
+  const DROP_HIGH = 2.0;         // rad/s; at/above this peak speed -> DROP_MAX (clamps)
   const DROP_MIN = 0;            // gate drop fraction for slow motions
   const DROP_MAX = 0.9;          // gate drop fraction for fast motions
 
