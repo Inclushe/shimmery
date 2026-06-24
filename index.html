@@ -169,6 +169,25 @@
   .presets button:active { background: rgba(255,255,255,0.18); }
   .presets button.active { background: #fff; color: #14161e; border-color: #fff; }
 
+  /* Sensor recording / playback bar (full-width, spans both columns) */
+  .rec-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-left: 14px; }
+  .rec-bar .rec-btn {
+    padding: 5px 12px;
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 999px;
+    background: rgba(20,22,30,0.6); color: rgba(255,255,255,0.85);
+    font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    cursor: pointer; transition: background .15s ease, color .15s ease;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .rec-bar .rec-btn:active { background: rgba(255,255,255,0.18); }
+  .rec-bar .rec-btn.active { background: #fff; color: #14161e; border-color: #fff; }
+  .rec-bar .rec-btn.rec-on { background: #ff5b5b; color: #fff; border-color: #ff5b5b; }
+  .rec-bar .rec-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .rec-status {
+    font: 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: rgba(255,255,255,0.55); font-variant-numeric: tabular-nums;
+  }
+
   /* Info button (bottom-right) */
   #infoBtn {
     position: fixed;
@@ -410,6 +429,18 @@
     <div class="opt">
       <label><input type="checkbox" id="debugCheck" /> Debug<span id="fpsTag" class="fps-tag">– fps</span></label>
     </div>
+    </div>
+
+    <!-- Sensor recording / playback: capture the raw orientation+accel stream and
+         replay it through the live pipeline so frame() re-predicts it with whatever
+         algorithm is selected. Save/Load persist a clip to disk. -->
+    <div class="full rec-bar">
+      <button type="button" class="rec-btn" id="recSaveBtn">Save</button>
+      <button type="button" class="rec-btn" id="recLoadBtn">Load</button>
+      <button type="button" class="rec-btn" id="recRecordBtn">● Rec</button>
+      <button type="button" class="rec-btn" id="recPlayBtn">▶ Play</button>
+      <span class="rec-status" id="recStatus"></span>
+      <input type="file" id="recFileInput" accept="application/json,.json" hidden />
     </div>
 
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
@@ -941,6 +972,12 @@
   let prevLinAccelMag = 0;       // previous linear-accel magnitude, for the jerk finite-difference
   let prevMotionTime = 0;        // timestamp of the last devicemotion sample (ms)
 
+  // --- Sensor recording / playback state --------------------------------
+  let recording = false, playing = false;   // mutually exclusive
+  let recBuffer = [];            // recorded ticks: { t, k:"o", a,b,g } | { t, k:"m", x,y,z }
+  let recStartWall = 0;          // performance.now() at record start (t is ms past this)
+  let playWall = 0, playIdx = 0, playRaf = 0; // playback cursor + its rAF handle
+
   // Convert (alpha, beta, gamma) Euler angles (degrees, ZXY order per the
   // W3C DeviceOrientation spec) into a quaternion, then rotate [0,0,1].
   function orientationToVector(alphaDeg, betaDeg, gammaDeg) {
@@ -983,8 +1020,8 @@
   // Take a freshly measured orientation vector and update both the latest
   // value and the angular-velocity estimate (by finite difference). Shared
   // by the sensor and the pointer fallback.
-  function ingestVector(newVec) {
-    const now = performance.now();
+  function ingestVector(newVec, nowOverride) {
+    const now = nowOverride != null ? nowOverride : performance.now();
     if (prevMeas) {
       const dt = (now - prevMeasTime) / 1000;
       if (dt > 0) {
@@ -1039,7 +1076,9 @@
   }
 
   function onOrientation(e) {
+    if (playing) return; // ignore live sensor while replaying a recording
     if (e.alpha == null && e.beta == null && e.gamma == null) return;
+    if (recording) recBuffer.push({ t: performance.now() - recStartWall, k: "o", a: e.alpha, b: e.beta, g: e.gamma });
     ingestVector(orientationToVector(e.alpha, e.beta, e.gamma));
   }
 
@@ -1048,10 +1087,17 @@
   // motion (moving the phone through space), distinct from the angular/rotational
   // signals (angSpeed/angDecel) derived from DeviceOrientation.
   function onMotion(e) {
+    if (playing) return; // ignore live sensor while replaying a recording
     const lin = e.acceleration;
     if (!lin) return; // device either reports `acceleration` or it doesn't
-    const now = performance.now();
-    const m = Math.hypot(lin.x || 0, lin.y || 0, lin.z || 0);
+    if (recording) recBuffer.push({ t: performance.now() - recStartWall, k: "m", x: lin.x, y: lin.y, z: lin.z });
+    processMotion(lin.x, lin.y, lin.z, performance.now());
+  }
+
+  // Core of the motion handler, callable with explicit values + timestamp so the
+  // playback pump can drive it from a recording (passing the recorded `now`).
+  function processMotion(lx, ly, lz, now) {
+    const m = Math.hypot(lx || 0, ly || 0, lz || 0);
     linAccelMag += (m - linAccelMag) * (debugOn ? accSmoothV : ACC_SMOOTH);
 
     // Jerk: rate of change of the (smoothed) acceleration magnitude. `absJerk` is
@@ -1068,6 +1114,128 @@
     prevLinAccelMag = linAccelMag;
     prevMotionTime = now;
   }
+
+  // --- Sensor recording / playback -------------------------------------
+  // Replay drives the SAME ingest path the live sensors use (ingestVector /
+  // processMotion), so frame() re-predicts the recorded ticks with whatever
+  // algorithm is currently selected. A dedicated rAF pump releases ticks at
+  // real-time pace but passes each tick's RECORDED timestamp into the ingest
+  // path, so the internal dt matches the original capture. frame() is untouched.
+
+  // Clear the finite-difference history so the first replayed tick — and the
+  // seam where the loop wraps from the last tick back to the first — can't
+  // compute a bogus dt / velocity spike. (The "start fresh" requirement.)
+  function resetSensorState() {
+    prevMeas = null; prevMeasTime = 0;
+    prevMotionTime = 0; prevLinAccelMag = 0;
+  }
+
+  function playbackTick(now) {
+    if (!playing) return;
+    const elapsed = now - playWall;
+    while (playIdx < recBuffer.length && recBuffer[playIdx].t <= elapsed) {
+      const ev = recBuffer[playIdx++];
+      if (ev.k === "o") ingestVector(orientationToVector(ev.a, ev.b, ev.g), ev.t);
+      else processMotion(ev.x, ev.y, ev.z, ev.t);
+    }
+    if (playIdx >= recBuffer.length) { // loop: restart fresh at the seam
+      playIdx = 0; playWall = now; resetSensorState();
+    }
+    playRaf = requestAnimationFrame(playbackTick);
+  }
+
+  function startPlayback() {
+    if (!recBuffer.length || playing) return;
+    if (recording) stopRecording();
+    playing = true;
+    playIdx = 0; playWall = performance.now();
+    resetSensorState();
+    updateRecUI();
+    playRaf = requestAnimationFrame(playbackTick);
+  }
+  function stopPlayback() {
+    if (!playing) return;
+    playing = false;
+    if (playRaf) cancelAnimationFrame(playRaf);
+    playRaf = 0;
+    resetSensorState(); // hand cleanly back to the live sensor
+    updateRecUI();
+  }
+
+  function startRecording() {
+    if (playing) stopPlayback();
+    recBuffer = [];
+    recStartWall = performance.now();
+    recording = true;
+    updateRecUI();
+  }
+  function stopRecording() {
+    if (!recording) return;
+    recording = false;
+    updateRecUI();
+  }
+
+  // A clip is { v, events, outputs }. `outputs` is reserved (empty) for a future
+  // feature: per-algorithm frame() outputs (predicted positions) from these same
+  // ticks. Not populated or consumed here.
+  function saveRecording() {
+    if (!recBuffer.length) return;
+    const clip = { v: 1, events: recBuffer, outputs: null };
+    const blob = new Blob([JSON.stringify(clip)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "shimmery-recording-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  function loadRecording(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        const events = Array.isArray(data) ? data : data && data.events;
+        if (Array.isArray(events)) {
+          stopPlayback();
+          recBuffer = events;
+          updateRecUI();
+        }
+      } catch (_) { /* ignore malformed file */ }
+    };
+    reader.readAsText(file);
+  }
+
+  // DOM wiring for the recording bar.
+  const recSaveBtn = document.getElementById("recSaveBtn");
+  const recLoadBtn = document.getElementById("recLoadBtn");
+  const recRecordBtn = document.getElementById("recRecordBtn");
+  const recPlayBtn = document.getElementById("recPlayBtn");
+  const recStatus = document.getElementById("recStatus");
+  const recFileInput = document.getElementById("recFileInput");
+
+  function updateRecUI() {
+    const n = recBuffer.length;
+    recRecordBtn.classList.toggle("rec-on", recording);
+    recRecordBtn.textContent = recording ? "■ Stop" : "● Rec";
+    recPlayBtn.classList.toggle("active", playing);
+    recPlayBtn.textContent = playing ? "■ Stop" : "▶ Play";
+    recSaveBtn.disabled = !n || recording;
+    recPlayBtn.disabled = (!n && !playing) || recording;
+    recRecordBtn.disabled = playing;
+    recStatus.textContent = recording ? "● " + n
+      : playing ? "▶ playing"
+      : n ? n + " ticks" : "no clip";
+  }
+
+  recSaveBtn.addEventListener("click", saveRecording);
+  recLoadBtn.addEventListener("click", () => recFileInput.click());
+  recFileInput.addEventListener("change", () => {
+    if (recFileInput.files && recFileInput.files[0]) loadRecording(recFileInput.files[0]);
+    recFileInput.value = ""; // allow re-loading the same file
+  });
+  recRecordBtn.addEventListener("click", () => { recording ? stopRecording() : startRecording(); });
+  recPlayBtn.addEventListener("click", () => { playing ? stopPlayback() : startPlayback(); });
+  updateRecUI();
 
   // --- Debug overlay ----------------------------------------------------
   // Values computed inside frame() that the overlay needs to read back.
