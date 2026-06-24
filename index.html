@@ -68,7 +68,13 @@
     padding-right: 4px; /* room for the scrollbar so it doesn't cover toggles */
   }
   #toggles .opt { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  #toggles .opt.hidden { display: none; }
   #toggles .full { grid-column: 1 / -1; }
+  #toggles .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; align-self: start; }
+  #toggles .group-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+    color: rgba(255,255,255,0.55); padding-left: 14px; margin-bottom: 2px;
+  }
   #toggles label {
     display: flex; align-items: center; gap: 8px;
     padding: 9px 14px;
@@ -81,8 +87,10 @@
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   }
   #toggles input[type="checkbox"] { width: 16px; height: 16px; accent-color: #fff; cursor: pointer; }
+  /* Always-on fps readout pinned to the trailing edge of the Debug label. */
+  .fps-tag { margin-left: auto; font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.55); font-variant-numeric: tabular-nums; }
   #densityRow, #sizeRow { gap: 10px; }
-  #densityRow input[type="range"], #sizeRow input[type="range"] { width: 110px; accent-color: #fff; cursor: pointer; }
+  #densityRow input[type="range"], #sizeRow input[type="range"] { flex: 1; min-width: 0; accent-color: #fff; cursor: pointer; }
 
   /* Disabled toggles in Raw Sensor mode */
   #toggles label.disabled { opacity: 0.4; cursor: not-allowed; }
@@ -286,8 +294,12 @@
   <div id="toggles">
     <div id="modeToggle" class="full seg" role="group" aria-label="Orientation mode">
       <button type="button" class="seg-opt" data-mode="raw">Raw Sensor</button>
+      <button type="button" class="seg-opt" data-mode="demo">Demo</button>
       <button type="button" class="seg-opt active" data-mode="predicted">Predicted</button>
     </div>
+    <!-- Left column: every motion limiter. -->
+    <div class="col">
+      <div class="group-label">Limiters</div>
     <div class="opt">
       <label><input type="checkbox" id="accelCheck" checked /> Linear accel limiter<button type="button" class="glide-btn active" id="accGlideBtn">glide</button></label>
       <div class="thresh limiter">
@@ -296,16 +308,6 @@
         <div class="field"><span>smooth</span><input type="number" id="accSmoothInput" step="0.05" min="0" max="1" /></div>
         <div class="field"><span>atk ms</span><input type="number" id="accAtkInput" step="50" /></div>
         <div class="field"><span>rel ms</span><input type="number" id="accRelInput" step="50" /></div>
-      </div>
-    </div>
-    <div class="opt">
-      <label><input type="checkbox" id="sjerkCheck" /> Jerk limiter<button type="button" class="glide-btn active" id="sjerkGlideBtn">glide</button></label>
-      <div class="thresh limiter">
-        <div class="field"><span>low</span><input type="number" id="sjerkLowInput" step="1" /></div>
-        <div class="field"><span>high</span><input type="number" id="sjerkHighInput" step="1" /></div>
-        <div class="field"><span>smooth</span><input type="number" id="sjerkSmoothInput" step="0.05" min="0" max="1" /></div>
-        <div class="field"><span>atk ms</span><input type="number" id="sjerkAtkInput" step="50" /></div>
-        <div class="field"><span>rel ms</span><input type="number" id="sjerkRelInput" step="50" /></div>
       </div>
     </div>
     <div class="opt">
@@ -338,22 +340,38 @@
         <div class="field"><span>rel ms</span><input type="number" id="decelRelInput" step="50" /></div>
       </div>
     </div>
+    <div class="opt" id="dropLimOpt">
+      <label><input type="checkbox" id="dropLimCheck" checked /> Drop limiter<button type="button" class="glide-btn" id="dropGlideBtn">glide</button></label>
+      <div class="thresh limiter">
+        <div class="field"><span>low</span><input type="number" id="dropLowInput" step="0.1" /></div>
+        <div class="field"><span>high</span><input type="number" id="dropHighInput" step="0.1" /></div>
+        <div class="field"><span>min</span><input type="number" id="dropMinInput" step="0.05" min="0" max="1" /></div>
+        <div class="field"><span>max</span><input type="number" id="dropMaxInput" step="0.05" min="0" max="1" /></div>
+        <div class="field"><span>atk ms</span><input type="number" id="dropAtkInput" step="50" /></div>
+        <div class="field"><span>rel ms</span><input type="number" id="dropRelInput" step="50" /></div>
+      </div>
+    </div>
+    </div>
+
+    <!-- Right column: prediction algorithm behaviour. -->
+    <div class="col">
+      <div class="group-label">Algorithm</div>
     <div class="opt" id="settleOpt">
       <div id="settleToggle" class="seg" role="group" aria-label="Inertial settle algorithm">
-        <button type="button" class="seg-opt active" data-settle="original">Original</button>
-        <button type="button" class="seg-opt" data-settle="main">Main</button>
+        <button type="button" class="seg-opt active" data-settle="velocity">Velocity</button>
+        <button type="button" class="seg-opt" data-settle="spring">Spring</button>
         <button type="button" class="seg-opt" data-settle="comoving">Co-moving</button>
       </div>
-      <!-- Original = inertial settle off (plain predicted easing); it has no options. -->
-      <!-- Main: the main-branch speed-gated spring (its own variables). -->
-      <div class="settle-panel" data-settle="main">
+      <!-- Velocity = inertial settle off (plain predicted easing); it has no options. -->
+      <!-- Spring: the main-branch speed-gated spring (its own variables). -->
+      <div class="settle-panel" data-settle="spring">
         <div class="thresh">
-          <div class="field"><span>speed</span><input type="number" id="mainSpeedInput" step="0.1" /></div>
-          <div class="field"><span>track</span><input type="number" id="mainTrackInput" step="10" /></div>
-          <div class="field"><span>anchor</span><input type="number" id="mainAnchorInput" step="0.5" /></div>
-          <div class="field"><span>damp</span><input type="number" id="mainDampInput" step="1" /></div>
+          <div class="field"><span>speed</span><input type="number" id="springSpeedInput" step="0.1" /></div>
+          <div class="field"><span>track</span><input type="number" id="springTrackInput" step="10" /></div>
+          <div class="field"><span>anchor</span><input type="number" id="springAnchorInput" step="0.5" /></div>
+          <div class="field"><span>damp</span><input type="number" id="springDampInput" step="1" /></div>
         </div>
-        <div class="presets" data-group="main">
+        <div class="presets" data-group="spring">
           <button type="button" data-preset="soft">Soft</button>
           <button type="button" data-preset="calm">Calm</button>
           <button type="button" data-preset="snap">Snap</button>
@@ -374,14 +392,13 @@
           <div class="field"><span>vsmooth</span><input type="number" id="vsmoothInput" step="0.05" min="0" max="1" /></div>
         </div>
         <div class="presets" data-group="comoving">
-          <button type="button" data-preset="soft">Soft</button>
-          <button type="button" data-preset="calm">Calm</button>
           <button type="button" data-preset="snap">Snap</button>
-          <button type="button" data-preset="main">Main</button>
+          <button type="button" data-preset="spring">Spring</button>
+          <button type="button" data-preset="gated">Gated</button>
         </div>
       </div>
     </div>
-    <div class="opt">
+    <div class="opt" id="leadCompOpt">
       <label><input type="checkbox" id="leadCompCheck" checked /> Lead compensation</label>
     </div>
     <div class="opt">
@@ -391,10 +408,12 @@
       </div>
     </div>
     <div class="opt">
-      <label><input type="checkbox" id="debugCheck" /> Debug</label>
+      <label><input type="checkbox" id="debugCheck" /> Debug<span id="fpsTag" class="fps-tag">– fps</span></label>
     </div>
-    <label id="densityRow" class="full">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
-    <label id="sizeRow" class="full">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="1" /></label>
+    </div>
+
+    <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
+    <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="6" /></label>
   </div>
 
   <div id="debug" class="hidden" aria-hidden="true"></div>
@@ -441,24 +460,22 @@
   const desktopMsg = document.getElementById("desktopMsg");
   const smoothCheck = document.getElementById("smoothCheck");
   const accelCheck = document.getElementById("accelCheck");
-  const sjerkCheck = document.getElementById("sjerkCheck");
   const ajerkCheck = document.getElementById("ajerkCheck");
   const decelCheck = document.getElementById("decelCheck");
   const angAccelCheck = document.getElementById("angAccelCheck");
+  const dropLimCheck = document.getElementById("dropLimCheck");
   const leadCompCheck = document.getElementById("leadCompCheck");
 
   // Smoothing: when off, snap to the target instead of easing toward it.
   // Orientation mode (see the segmented toggle below): "Predicted" extrapolates
   // the reading forward; "Raw Sensor" uses the reading as-is for an A/B
   // comparison and disables/forces-off every prediction-related option.
-  // NOTE on the limiters: "Linear accel"/"Jerk"/"AbsJerk" all key off LINEAR
+  // NOTE on the limiters: "Linear accel"/"AbsJerk" all key off LINEAR
   // (translational) motion from the DeviceMotion accelerometer; "Angular decel"
   // keys off ROTATIONAL motion from DeviceOrientation. Same word "accel" but two
   // unrelated quantities/sensors.
   // Linear accel limiter: when on, damp the prediction while linear acceleration is
   // high (e.g. shoving the phone) so jitter isn't amplified into flicker.
-  // Signed jerk limiter: keyed off |smoothed signed linear jerk| (the original
-  // signal, which dips through zero on a sign change). Off by default.
   // AbsJerk limiter: keyed off the rectify-then-smooth linear-jerk envelope (stays
   // elevated across a sign change). On by default.
   // Damp glide (per limiter): ease each limiter's damping toward its target in both
@@ -466,23 +483,24 @@
   // limiter engaging abruptly doesn't slam `damp` and cause its own flicker.
   let smoothing = true;
   let prediction = true;
+  let demoMode = false;     // split canvas: raw (left) vs predicted (right); the "Demo" mode
   let accelLimiter = true;
-  let signedJerkLimiter = false;
   let absJerkLimiter = true;
   let decelLimiter = false;   // idea 1: damp prediction during abrupt deceleration
   let angAccelLimiter = false; // damp prediction during abrupt rotation onset (off: it opposes snappy onset)
-  let inertia = false;      // settle active (false only for the "Original" algorithm); derived from settleMode
-  let settleMode = "original"; // which inertial settle algorithm: "original" | "main" | "comoving"
+  let dropLimiter = true;     // ramp the co-moving gate's drop with peak speed (off: static drop field)
+  let inertia = false;      // settle active (false only for the "Velocity" algorithm); derived from settleMode
+  let settleMode = "velocity"; // which inertial settle algorithm: "velocity" | "spring" | "comoving"
   let leadComp = true;     // pre-pay the spring's c/k group delay by extending the lead (borrowed from main)
-  // Per-limiter glide enables (default on).
-  let accGlide = true, sjerkGlide = true, ajerkGlide = true,
-      decelGlide = true, angAccGlide = true;
+  // Per-limiter glide enables (default on, except the drop limiter).
+  let accGlide = true, ajerkGlide = true,
+      decelGlide = true, angAccGlide = true, dropGlide = false;
   smoothCheck.addEventListener("change", () => { smoothing = smoothCheck.checked; });
   accelCheck.addEventListener("change", () => { accelLimiter = accelCheck.checked; });
-  sjerkCheck.addEventListener("change", () => { signedJerkLimiter = sjerkCheck.checked; });
   ajerkCheck.addEventListener("change", () => { absJerkLimiter = ajerkCheck.checked; });
   decelCheck.addEventListener("change", () => { decelLimiter = decelCheck.checked; });
   angAccelCheck.addEventListener("change", () => { angAccelLimiter = angAccelCheck.checked; });
+  dropLimCheck.addEventListener("change", () => { dropLimiter = dropLimCheck.checked; });
   leadCompCheck.addEventListener("change", () => { leadComp = leadCompCheck.checked; });
   // Glide pill toggles (one per limiter + dynamic speed): flip the .active class
   // and the backing flag on click. Seeded active in the markup (all default on).
@@ -497,10 +515,10 @@
     });
   }
   bindGlideBtn("accGlideBtn", (v) => { accGlide = v; });
-  bindGlideBtn("sjerkGlideBtn", (v) => { sjerkGlide = v; });
   bindGlideBtn("ajerkGlideBtn", (v) => { ajerkGlide = v; });
   bindGlideBtn("decelGlideBtn", (v) => { decelGlide = v; });
   bindGlideBtn("angAccGlideBtn", (v) => { angAccGlide = v; });
+  bindGlideBtn("dropGlideBtn", (v) => { dropGlide = v; });
 
   // Orientation mode: segmented "Raw Sensor" / "Predicted" toggle. In Raw
   // Sensor mode the prediction is off and every prediction-related option is
@@ -511,54 +529,68 @@
   // Each entry: the checkbox, its sibling threshold row, and a boolean setter.
   const limitedControls = [
     { box: accelCheck,  set: (v) => { accelLimiter = v; } },
-    { box: sjerkCheck,  set: (v) => { signedJerkLimiter = v; } },
     { box: ajerkCheck,  set: (v) => { absJerkLimiter = v; } },
     { box: decelCheck,  set: (v) => { decelLimiter = v; } },
     { box: angAccelCheck, set: (v) => { angAccelLimiter = v; } },
+    { box: dropLimCheck, set: (v) => { dropLimiter = v; } },
     { box: leadCompCheck, set: (v) => { leadComp = v; } },
     { box: smoothCheck, set: (v) => { smoothing = v; } },
   ];
   // Inertial settle algorithm switch (segmented, like the Raw/Predicted toggle):
-  // "Original" turns the settle off (plain predicted easing); "Main" and
+  // "Velocity" turns the settle off (plain predicted easing); "Spring" and
   // "Co-moving" run two independent algorithms, each with its own options panel.
   const settleToggle = document.getElementById("settleToggle");
+  const leadCompOpt = document.getElementById("leadCompOpt");
+  const dropLimOpt = document.getElementById("dropLimOpt");
   const settleOptBlock = document.getElementById("settleOpt");
   const settleOpts = settleToggle.querySelectorAll(".seg-opt");
   const settlePanels = settleOptBlock.querySelectorAll(".settle-panel");
   function setSettleMode(mode) {
     settleMode = mode;
-    inertia = mode !== "original"; // Original = settle off
+    inertia = mode !== "velocity"; // Velocity = settle off
     settleOpts.forEach((o) => o.classList.toggle("active", o.dataset.settle === mode));
     settlePanels.forEach((p) => p.classList.toggle("active", p.dataset.settle === mode));
+    // Lead compensation applies to any inertial settle (Spring/Co-moving); the
+    // Drop limiter is a co-moving-only control. Hide them when not in use.
+    leadCompOpt.classList.toggle("hidden", mode === "velocity");
+    dropLimOpt.classList.toggle("hidden", mode !== "comoving");
   }
   settleOpts.forEach((o) =>
     o.addEventListener("click", () => { if (!o.disabled) setSettleMode(o.dataset.settle); }));
-  function setMode(predicted) {
-    prediction = predicted;
+  setSettleMode(settleMode); // apply initial show/hide for the active algorithm
+  // Orientation mode is a 3-way segmented switch: "raw" (sensor as-is), "demo"
+  // (split canvas: raw left, predicted right), and "predicted". Demo and Predicted
+  // both run the prediction pipeline, so the prediction-only controls stay enabled
+  // for both; only Raw greys them out and forces them off.
+  function setMode(mode) {
+    prediction = mode !== "raw";
+    demoMode = mode === "demo";
     for (const c of limitedControls) {
       const label = c.box.closest("label");
       const thresh = label.nextElementSibling; // the matching .thresh row
-      c.box.disabled = !predicted;
-      label.classList.toggle("disabled", !predicted);
+      c.box.disabled = !prediction;
+      label.classList.toggle("disabled", !prediction);
       if (thresh && thresh.classList.contains("thresh")) {
-        thresh.classList.toggle("disabled", !predicted);
-        thresh.querySelectorAll("input").forEach((el) => { el.disabled = !predicted; });
+        thresh.classList.toggle("disabled", !prediction);
+        thresh.querySelectorAll("input").forEach((el) => { el.disabled = !prediction; });
       }
       // Force false in raw mode; restore the remembered checkbox value otherwise.
-      c.set(predicted ? c.box.checked : false);
+      c.set(prediction ? c.box.checked : false);
     }
     // The settle switch + its option panels are prediction-only too: grey them out
     // in Raw mode (the easing path runs regardless of the selected algorithm).
-    settleOptBlock.classList.toggle("disabled", !predicted);
-    settleOptBlock.querySelectorAll("button, input").forEach((el) => { el.disabled = !predicted; });
-    modeOpts.forEach((o) => o.classList.toggle("active", (o.dataset.mode === "predicted") === predicted));
+    settleOptBlock.classList.toggle("disabled", !prediction);
+    settleOptBlock.querySelectorAll("button, input").forEach((el) => { el.disabled = !prediction; });
+    modeOpts.forEach((o) => o.classList.toggle("active", o.dataset.mode === mode));
   }
-  modeOpts.forEach((o) => o.addEventListener("click", () => setMode(o.dataset.mode === "predicted")));
+  modeOpts.forEach((o) => o.addEventListener("click", () => setMode(o.dataset.mode)));
 
   // Debug overlay: when on, show a live readout of the internal signals that
   // drive the effect (accel magnitude, damping, angular velocity, vectors).
   const debugCheck = document.getElementById("debugCheck");
   const debugPanel = document.getElementById("debug");
+  const fpsTag = document.getElementById("fpsTag"); // always-on fps readout in the Debug label
+  let lastFpsShown = 0;                             // throttle the fps label updates (ms)
   let debugOn = false;
   debugCheck.addEventListener("change", () => {
     debugOn = debugCheck.checked;
@@ -591,7 +623,7 @@
   fixModal.addEventListener("click", (e) => { if (e.target === fixModal) fixModal.classList.add("hidden"); });
 
   // --- Tunables ---------------------------------------------------------
-  let dotRadius = 1;             // dot radius in px; set by the size slider
+  let dotRadius = 6;             // dot radius in px; set by the size slider
   const SPOT = 0.85;             // angular radius (radians) of the "lit" zone
   const BASE_GRAY = 32;          // brightness of a far-away dot (0-255)
 
@@ -612,12 +644,6 @@
   const ACC_LOW = 3;             // below this (m/s^2) prediction is untouched
   const ACC_HIGH = 4;            // above this the prediction is fully damped
   const ACC_SMOOTH = 0.4;        // EMA factor for the accel magnitude
-
-  // Signed jerk limiter: ramp keyed off |smoothed signed LINEAR jerk| (d/dt of the
-  // DeviceMotion linear accel — still translational, not rotational).
-  const JERK_LOW = 10;           // below this (m/s^3) prediction is untouched
-  const JERK_HIGH = 15;          // above this the prediction is fully damped
-  const JERK_SMOOTH = 0.4;       // EMA factor for the signed jerk
 
   // AbsJerk limiter: ramp keyed off the rectify-then-smooth envelope, which reads
   // higher and has a nonzero noise floor, so it gets its own (higher) band.
@@ -659,14 +685,14 @@
   const COAST = 0.25;            // 0..1; fraction of the motion's momentum kept entering SLOW (coast-through)
   const BASE_TRACK = 0.05;       // 0..1; per-frame rate the co-moving setpoint base bleeds toward raw truth
   const LEAD_RATE = 1;           // multiplier on how fast the lead grows in with motion (1 = at the motion's rate)
-  // Main-branch inertial settle, kept selectable for A/B. A speed-gated strong
+  // Spring inertial settle (from the main branch), kept selectable for A/B. A speed-gated strong
   // spring tracks the led target while moving; as measured speed -> 0 the drive
   // fades and `cur` coasts to rest under constant damping. Its own variables --
   // nothing is shared with the co-moving algorithm above.
-  const MAIN_SETTLE_SPEED = 1.0; // rad/s; at/above this the measured-speed drive is full
-  const MAIN_TRACK_STIFF  = 2500;// 1/s^2; strong tracking spring (gated by measured speed)
-  const MAIN_ANCHOR_STIFF = 1;   // 1/s^2; weak always-on spring toward raw truth
-  const MAIN_DAMP_STIFF   = 70;  // 1/s; constant velocity damping (= 2*sqrt(2500)*0.7, zeta 0.7)
+  const SPRING_SETTLE_SPEED = 1.0; // rad/s; at/above this the measured-speed drive is full
+  const SPRING_TRACK_STIFF  = 2500;// 1/s^2; strong tracking spring (gated by measured speed)
+  const SPRING_ANCHOR_STIFF = 1;   // 1/s^2; weak always-on spring toward raw truth
+  const SPRING_DAMP_STIFF   = 70;  // 1/s; constant velocity damping (= 2*sqrt(2500)*0.7, zeta 0.7)
   // Velocity peak-detector: FAST while the detector velocity climbs/holds at its
   // peak; SLOW once it falls below VEL_DROP of the peak (a movement winding down,
   // latched through to rest); re-arm FAST when it rises VEL_RISE above its valley
@@ -675,34 +701,45 @@
   const VEL_DROP = 0.7;          // SLOW when detVel < peak * VEL_DROP
   const VEL_RISE = 0.3;          // rad/s; FAST when detVel > valley + VEL_RISE
 
+  // Drop limiter: instead of a fixed gate drop, ramp it up with the motion's PEAK
+  // speed so slow motions stay springy (drop -> DROP_MIN, gate never flips, full
+  // co-moving spring) while fast motions clamp at their tail (drop -> DROP_MAX,
+  // gate flips early into the deceleration). LOW/HIGH are peak-velocity thresholds.
+  const DROP_LOW = 1;          // rad/s; at/below this peak speed -> DROP_MIN (springy)
+  const DROP_HIGH = 2.0;         // rad/s; at/above this peak speed -> DROP_MAX (clamps)
+  const DROP_MIN = 0;            // gate drop fraction for slow motions
+  const DROP_MAX = 0.9;          // gate drop fraction for fast motions
+
   // Live, debug-editable copies of each limiter's LOW/HIGH band. Default to the
   // constants above; the number inputs (visible only in debug mode) update
   // these, and frame() uses them in place of the constants when debug is on.
   let accLowV = ACC_LOW, accHighV = ACC_HIGH;
-  let sjerkLowV = JERK_LOW, sjerkHighV = JERK_HIGH;
   let ajerkLowV = ABSJERK_LOW, ajerkHighV = ABSJERK_HIGH;
   let decelLowV = DECEL_LOW, decelHighV = DECEL_HIGH;
   let angAccLowV = ANGACC_LOW, angAccHighV = ANGACC_HIGH;
+  let dropLowV = DROP_LOW, dropHighV = DROP_HIGH;   // drop limiter peak-velocity band
+  let dropMinV = DROP_MIN, dropMaxV = DROP_MAX;     // drop limiter output range
   // Per-limiter (and dynamic-speed) glide attack/release times (ms) plus the
   // gliding state each one carries. Seeded from the shared GLIDE_* defaults.
   let accAtkV = GLIDE_ATTACK_MS, accRelV = GLIDE_RELEASE_MS;
-  let sjerkAtkV = GLIDE_ATTACK_MS, sjerkRelV = GLIDE_RELEASE_MS;
   let ajerkAtkV = GLIDE_ATTACK_MS, ajerkRelV = GLIDE_RELEASE_MS;
   let decelAtkV = GLIDE_ATTACK_MS, decelRelV = GLIDE_RELEASE_MS;
   let angAccAtkV = GLIDE_ATTACK_MS, angAccRelV = GLIDE_RELEASE_MS;
-  const accGl = { v: 1 }, sjerkGl = { v: 1 }, ajerkGl = { v: 1 },
+  let dropAtkV = GLIDE_ATTACK_MS, dropRelV = GLIDE_RELEASE_MS;
+  const accGl = { v: 1 }, ajerkGl = { v: 1 },
         decelGl = { v: 1 }, angAccGl = { v: 1 };
+  const dropGl = { v: VEL_DROP };    // glide state for the drop limiter
+  let dropEff = VEL_DROP;            // current gate drop fraction (limiter output or static)
   let curSmoothV = CUR_SMOOTH;
   let leadTimeV = LEAD_MS / 1000,    // seconds; predictive lead time (the `lead ms` field)
       anchorV = ANCHOR_STIFF;        // 1/s^2; weak spring toward raw truth (the `anchor` field)
   let springStiffV = SPRING_STIFF, springZetaV = SPRING_ZETA; // spring knobs (`stiff`/`zeta`)
   let coastV = COAST;                // momentum kept entering SLOW (the `coast` field)
   let baseTrackV = BASE_TRACK, leadRateV = LEAD_RATE; // co-moving setpoint knobs (`basetrk`/`leadrt`)
-  let mainSpeedV = MAIN_SETTLE_SPEED, mainTrackV = MAIN_TRACK_STIFF, // main algo knobs (`speed`/`track`/
-      mainAnchorV = MAIN_ANCHOR_STIFF, mainDampV = MAIN_DAMP_STIFF;  // `anchor`/`damp`) -- independent vars
+  let springSpeedV = SPRING_SETTLE_SPEED, springTrackV = SPRING_TRACK_STIFF, // spring algo knobs (`speed`/`track`/
+      springAnchorV = SPRING_ANCHOR_STIFF, springDampV = SPRING_DAMP_STIFF;  // `anchor`/`damp`) -- independent vars
   let velDropV = VEL_DROP, velRiseV = VEL_RISE, velSmoothV = VEL_DET_SMOOTH;
   let accSmoothV = ACC_SMOOTH;       // EMA factor for accel magnitude (debug-editable)
-  let sjerkSmoothV = JERK_SMOOTH;    // EMA factor for signed jerk
   let ajerkSmoothV = ABSJERK_SMOOTH; // EMA factor for the rectified-jerk envelope
   let decelSmoothV = DECEL_SMOOTH;
   let angAccSmoothV = ANGACC_SMOOTH;
@@ -730,14 +767,10 @@
   }
   bindThreshold("accLowInput", ACC_LOW, (v) => { accLowV = v; });
   bindThreshold("accHighInput", ACC_HIGH, (v) => { accHighV = v; });
-  bindThreshold("sjerkLowInput", JERK_LOW, (v) => { sjerkLowV = v; });
-  bindThreshold("sjerkHighInput", JERK_HIGH, (v) => { sjerkHighV = v; });
   bindThreshold("ajerkLowInput", ABSJERK_LOW, (v) => { ajerkLowV = v; });
   bindThreshold("ajerkHighInput", ABSJERK_HIGH, (v) => { ajerkHighV = v; });
   bindThreshold("accAtkInput", GLIDE_ATTACK_MS, (v) => { accAtkV = v; });
   bindThreshold("accRelInput", GLIDE_RELEASE_MS, (v) => { accRelV = v; });
-  bindThreshold("sjerkAtkInput", GLIDE_ATTACK_MS, (v) => { sjerkAtkV = v; });
-  bindThreshold("sjerkRelInput", GLIDE_RELEASE_MS, (v) => { sjerkRelV = v; });
   bindThreshold("ajerkAtkInput", GLIDE_ATTACK_MS, (v) => { ajerkAtkV = v; });
   bindThreshold("ajerkRelInput", GLIDE_RELEASE_MS, (v) => { ajerkRelV = v; });
   bindThreshold("decelAtkInput", GLIDE_ATTACK_MS, (v) => { decelAtkV = v; });
@@ -749,6 +782,12 @@
   bindThreshold("decelHighInput", DECEL_HIGH, (v) => { decelHighV = v; });
   bindThreshold("angAccLowInput", ANGACC_LOW, (v) => { angAccLowV = v; });
   bindThreshold("angAccHighInput", ANGACC_HIGH, (v) => { angAccHighV = v; });
+  bindThreshold("dropLowInput", DROP_LOW, (v) => { dropLowV = v; });
+  bindThreshold("dropHighInput", DROP_HIGH, (v) => { dropHighV = v; });
+  bindThreshold("dropMinInput", DROP_MIN, (v) => { dropMinV = v; });
+  bindThreshold("dropMaxInput", DROP_MAX, (v) => { dropMaxV = v; });
+  bindThreshold("dropAtkInput", GLIDE_ATTACK_MS, (v) => { dropAtkV = v; });
+  bindThreshold("dropRelInput", GLIDE_RELEASE_MS, (v) => { dropRelV = v; });
   bindThreshold("leadTimeInput", LEAD_MS, (v) => { leadTimeV = v / 1000; }); // ms -> s
   bindThreshold("stiffInput", SPRING_STIFF, (v) => { springStiffV = v; });
   bindThreshold("zetaInput", SPRING_ZETA, (v) => { springZetaV = v; });
@@ -760,35 +799,37 @@
   bindThreshold("riseInput", VEL_RISE, (v) => { velRiseV = v; });
   bindThreshold("vsmoothInput", VEL_DET_SMOOTH, (v) => { velSmoothV = v; });
 
-  // Main algorithm inputs (its own variables, independent from co-moving).
-  bindThreshold("mainSpeedInput", MAIN_SETTLE_SPEED, (v) => { mainSpeedV = v; });
-  bindThreshold("mainTrackInput", MAIN_TRACK_STIFF, (v) => { mainTrackV = v; });
-  bindThreshold("mainAnchorInput", MAIN_ANCHOR_STIFF, (v) => { mainAnchorV = v; });
-  bindThreshold("mainDampInput", MAIN_DAMP_STIFF, (v) => { mainDampV = v; });
+  // Spring algorithm inputs (its own variables, independent from co-moving).
+  bindThreshold("springSpeedInput", SPRING_SETTLE_SPEED, (v) => { springSpeedV = v; });
+  bindThreshold("springTrackInput", SPRING_TRACK_STIFF, (v) => { springTrackV = v; });
+  bindThreshold("springAnchorInput", SPRING_ANCHOR_STIFF, (v) => { springAnchorV = v; });
+  bindThreshold("springDampInput", SPRING_DAMP_STIFF, (v) => { springDampV = v; });
 
   // Per-algorithm presets. Each group owns its own buttons (data-group), inputs,
   // and preset table -- no values are shared between algorithms.
-  //   Co-moving: spanning the damping spectrum (c = 2*sqrt(stiff)*zeta); each is a
-  //   FULL config (spring + lead + setpoint knobs) so switching is clean. "Main"
-  //   here emulates main's feel within the co-moving algo (basetrk 1, leadrt 10,
-  //   coast 0, drop/rise 0 -> gate defeated, flicker and all).
-  //   Main: main's own Soft/Calm/Snap over speed/track/anchor/damp.
+  //   Co-moving: each is a FULL config (spring + lead + setpoint knobs) so
+  //   switching is clean. "Gated" is the default: the springy feel (stiff 2500,
+  //   zeta 0.5) with the gate active (drop 0.9, driven by the Drop limiter) and a
+  //   genuinely co-moving base (basetrk 0.05) so it doesn't snap to raw on a
+  //   SLOW->FAST flip. "Snap" is the older fraction-gate config; "Spring" emulates
+  //   the Spring algo's feel (basetrk 1, leadrt 10, coast 0, drop/rise 0 -> gate
+  //   defeated, flicker and all).
+  //   Spring: the Spring algo's own Soft/Calm/Snap over speed/track/anchor/damp.
   const comovingPresets = {
-    soft: { stiffInput: 1000, zetaInput: 1.1, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
-    calm: { stiffInput: 1600, zetaInput: 1.0, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
-    snap: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE },
-    main: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0, riseInput: 0 },
+    snap: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: COAST, baseTrackInput: BASE_TRACK, leadRateInput: LEAD_RATE, dropInput: VEL_DROP, riseInput: VEL_RISE, vsmoothInput: VEL_DET_SMOOTH },
+    spring: { stiffInput: 2500, zetaInput: 0.7, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 1, leadRateInput: 10, dropInput: 0, riseInput: 0, vsmoothInput: VEL_DET_SMOOTH },
+    gated: { stiffInput: 2500, zetaInput: 0.5, anchorStiffInput: ANCHOR_STIFF, leadTimeInput: LEAD_MS, coastInput: 0, baseTrackInput: 0.05, leadRateInput: 10, dropInput: 0.9, riseInput: 0, vsmoothInput: 0.5 },
   };
-  const comovingInputIds = ["stiffInput", "zetaInput", "anchorStiffInput", "leadTimeInput", "coastInput", "baseTrackInput", "leadRateInput", "dropInput", "riseInput"];
-  const mainPresets = {
-    soft: { mainSpeedInput: 1.0, mainTrackInput: 1000, mainAnchorInput: 1, mainDampInput: 70 },
-    calm: { mainSpeedInput: 1.0, mainTrackInput: 1600, mainAnchorInput: 1, mainDampInput: 80 },
-    snap: { mainSpeedInput: 1.0, mainTrackInput: 2500, mainAnchorInput: 1, mainDampInput: 70 },
+  const comovingInputIds = ["stiffInput", "zetaInput", "anchorStiffInput", "leadTimeInput", "coastInput", "baseTrackInput", "leadRateInput", "dropInput", "riseInput", "vsmoothInput"];
+  const springPresets = {
+    soft: { springSpeedInput: 1.0, springTrackInput: 1000, springAnchorInput: 1, springDampInput: 70 },
+    calm: { springSpeedInput: 1.0, springTrackInput: 1600, springAnchorInput: 1, springDampInput: 80 },
+    snap: { springSpeedInput: 1.0, springTrackInput: 2500, springAnchorInput: 1, springDampInput: 70 },
   };
-  const mainInputIds = ["mainSpeedInput", "mainTrackInput", "mainAnchorInput", "mainDampInput"];
+  const springInputIds = ["springSpeedInput", "springTrackInput", "springAnchorInput", "springDampInput"];
   // Wire one preset group: highlight the button matching the current inputs, apply
   // on click, and clear/re-light the highlight on any hand-edit.
-  function setupPresetGroup(group, presets, inputIds) {
+  function setupPresetGroup(group, presets, inputIds, defaultPreset) {
     const btns = document.querySelectorAll(`.presets[data-group="${group}"] button[data-preset]`);
     function refresh() {
       btns.forEach((btn) => {
@@ -798,24 +839,26 @@
         btn.classList.toggle("active", !!match);
       });
     }
-    btns.forEach((btn) => btn.addEventListener("click", () => {
-      const p = presets[btn.dataset.preset];
-      if (!p) return;
+    function apply(p) {
       for (const id of inputIds) {
         const el = document.getElementById(id);
         el.value = p[id];
         el.dispatchEvent(new Event("input")); // reuse bindThreshold's listener to update the *V var
       }
       refresh();
+    }
+    btns.forEach((btn) => btn.addEventListener("click", () => {
+      const p = presets[btn.dataset.preset];
+      if (p) apply(p);
     }));
     inputIds.forEach((id) =>
       document.getElementById(id).addEventListener("input", refresh));
-    refresh();
+    if (defaultPreset && presets[defaultPreset]) apply(presets[defaultPreset]); // seed the default
+    else refresh();
   }
-  setupPresetGroup("comoving", comovingPresets, comovingInputIds);
-  setupPresetGroup("main", mainPresets, mainInputIds);
+  setupPresetGroup("comoving", comovingPresets, comovingInputIds, "gated");
+  setupPresetGroup("spring", springPresets, springInputIds);
   bindThreshold("accSmoothInput", ACC_SMOOTH, (v) => { accSmoothV = v; });
-  bindThreshold("sjerkSmoothInput", JERK_SMOOTH, (v) => { sjerkSmoothV = v; });
   bindThreshold("ajerkSmoothInput", ABSJERK_SMOOTH, (v) => { ajerkSmoothV = v; });
   bindThreshold("decelSmoothInput", DECEL_SMOOTH, (v) => { decelSmoothV = v; });
   bindThreshold("angAccSmoothInput", ANGACC_SMOOTH, (v) => { angAccSmoothV = v; });
@@ -894,7 +937,6 @@
   // --- LINEAR / TRANSLATIONAL motion, derived from DeviceMotion's accelerometer
   // (NOT orientation): how the phone is being moved/shoved through space. ---
   let linAccelMag = 0;           // smoothed linear-acceleration magnitude (m/s^2), from e.acceleration
-  let jerkMag = 0;               // smoothed linear jerk = d(linAccelMag)/dt (m/s^3); reference only
   let absJerk = 0;               // EMA of |raw linear jerk| (rectify-then-smooth envelope); drives the jerk limiter
   let prevLinAccelMag = 0;       // previous linear-accel magnitude, for the jerk finite-difference
   let prevMotionTime = 0;        // timestamp of the last devicemotion sample (ms)
@@ -974,7 +1016,7 @@
         // Peak/valley state machine: FAST while gateVel climbs/holds at its peak;
         // SLOW once it falls below VEL_DROP of the peak (movement winding down,
         // latched to rest); re-arm FAST when it rises VEL_RISE above its valley.
-        const dropFrac = debugOn ? velDropV : VEL_DROP;
+        const dropFrac = dropEff; // static drop, or the drop limiter's ramped value
         const riseAbs = debugOn ? velRiseV : VEL_RISE;
         if (settleFast) {
           if (gateVel > velPeak) velPeak = gateVel;
@@ -1012,15 +1054,13 @@
     const m = Math.hypot(lin.x || 0, lin.y || 0, lin.z || 0);
     linAccelMag += (m - linAccelMag) * (debugOn ? accSmoothV : ACC_SMOOTH);
 
-    // Jerk: rate of change of the (smoothed) acceleration magnitude. We keep a
-    // smoothed signed jerk for reference, plus `absJerk` — the rectify-then-
-    // smooth envelope (EMA of |raw jerk|) that drives the limiter; staying
-    // non-negative, it doesn't dip through zero when jerk changes sign.
+    // Jerk: rate of change of the (smoothed) acceleration magnitude. `absJerk` is
+    // the rectify-then-smooth envelope (EMA of |raw jerk|) that drives the limiter;
+    // staying non-negative, it doesn't dip through zero when jerk changes sign.
     if (prevMotionTime) {
       const dt = (now - prevMotionTime) / 1000;
       if (dt > 0) {
         const rawJerk = (linAccelMag - prevLinAccelMag) / dt;
-        jerkMag += (rawJerk - jerkMag) * (debugOn ? sjerkSmoothV : JERK_SMOOTH);
         absJerk += (Math.abs(rawJerk) - absJerk) * (debugOn ? ajerkSmoothV : ABSJERK_SMOOTH);
         dbg.motHz += (1 / dt - dbg.motHz) * 0.1; // DeviceMotion sample rate (debug)
       }
@@ -1031,7 +1071,7 @@
 
   // --- Debug overlay ----------------------------------------------------
   // Values computed inside frame() that the overlay needs to read back.
-  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, sJerkDamp: 1, aJerkDamp: 1, decelDamp: 1, drive: 1, vel: 0, peak: 0, predAngle: 0, fps: 0, oriHz: 0, motHz: 0 };
+  const dbg = { damp: 1, targetDamp: 1, accDamp: 1, aJerkDamp: 1, decelDamp: 1, drive: 1, vel: 0, peak: 0, predAngle: 0, fps: 0, oriHz: 0, motHz: 0 };
 
   // Each metric: a live accessor, a bar range, and a formatter. `bip` draws a
   // bipolar bar growing out from the center; `ticks` marks thresholds (accel).
@@ -1040,11 +1080,6 @@
       ticks: [{ at: () => accLowV, color: "#ff9b3b", dashed: true }, { at: () => accHighV, color: "#ff5b5b" }],
       color: (v) => v >= accHighV ? "#ff5b5b" : (v >= accLowV ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(2) },
-    { label: "jerk",    get: () => jerkMag,       min: -50, max: 50, bip: true, enabled: () => signedJerkLimiter,
-      ticks: [{ at: () => -sjerkHighV, color: "#ff5b5b" }, { at: () => -sjerkLowV, color: "#ff9b3b", dashed: true },
-              { at: () => sjerkLowV, color: "#ff9b3b", dashed: true }, { at: () => sjerkHighV, color: "#ff5b5b" }],
-      color: (v) => Math.abs(v) >= sjerkHighV ? "#ff5b5b" : (Math.abs(v) >= sjerkLowV ? "#ff9b3b" : "#5b9bff"),
-      fmt: (v) => v.toFixed(1) },
     { label: "absJerk", get: () => absJerk,       min: 0, max: 50, enabled: () => absJerkLimiter,
       ticks: [{ at: () => ajerkLowV, color: "#ff9b3b", dashed: true }, { at: () => ajerkHighV, color: "#ff5b5b" }],
       color: (v) => v >= ajerkHighV ? "#ff5b5b" : (v >= ajerkLowV ? "#ff9b3b" : "#5b9bff"),
@@ -1063,8 +1098,12 @@
     { label: "drive",   get: () => dbg.drive,     min: 0, max: 1, enabled: () => inertia, fmt: (v) => v.toFixed(2) },
     { label: "vel",     get: () => dbg.vel,       min: 0, max: 6, enabled: () => inertia,
       ticks: [{ at: () => dbg.peak, color: "#5bff9b" },
-              { at: () => dbg.peak * velDropV, color: "#ff9b3b", dashed: true }],
+              { at: () => dbg.peak * (dropLimiter ? dropEff : velDropV), color: "#ff9b3b", dashed: true }],
       color: () => settleFast ? "#5b9bff" : "rgba(255,255,255,0.4)",
+      fmt: (v) => v.toFixed(2) },
+    { label: "drop",    get: () => dropEff,       min: 0, max: 1, enabled: () => dropLimiter,
+      ticks: [{ at: () => dropMinV, color: "#ff9b3b", dashed: true }, { at: () => dropMaxV, color: "#ff5b5b" }],
+      color: (v) => v >= 0.6 ? "#ff5b5b" : (v >= 0.3 ? "#ff9b3b" : "#5b9bff"),
       fmt: (v) => v.toFixed(2) },
     { label: "lead ms", get: () => leadTimeV * 1000,
       min: 0, max: 120, enabled: () => inertia, fmt: (v) => v.toFixed(0) },
@@ -1206,9 +1245,9 @@
 
   // Group delay (seconds) of the active settle algorithm tracking a ramp, which
   // lead compensation pre-pays so the result lands the full lead ahead despite the
-  // spring's lag. Co-moving: c/k = 2*zeta/sqrt(stiff). Main: damp/track (its form).
+  // spring's lag. Co-moving: c/k = 2*zeta/sqrt(stiff). Spring: damp/track (its form).
   function settleLagSec() {
-    if (settleMode === "main") return mainTrackV > 0 ? mainDampV / mainTrackV : 0;
+    if (settleMode === "spring") return springTrackV > 0 ? springDampV / springTrackV : 0;
     if (settleMode === "comoving") return springStiffV > 0 ? 2 * springZetaV / Math.sqrt(springStiffV) : 0;
     return 0;
   }
@@ -1219,9 +1258,17 @@
     // Clamp dt so a frame-rate hitch can't push the explicit integrators past
     // their stability bound (damp < 2/dt). At <=45fps-equiv we just advance a
     // bit less than real time for that frame — imperceptible, keeps tuning safe.
-    let frameDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
+    const realDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
+    let frameDt = realDt;
     if (frameDt > 1 / 45) frameDt = 1 / 45;
     lastFrameTime = now;
+    // Always-on fps (from the unclamped delta, so it can read below 45). Smoothed,
+    // shown in the Debug label; throttled so it isn't relaid out every frame.
+    if (realDt > 0) dbg.fps += (1 / realDt - dbg.fps) * 0.1;
+    if (now - lastFpsShown > 250) {
+      fpsTag.textContent = dbg.fps.toFixed(0) + " fps";
+      lastFpsShown = now;
+    }
 
     // If readings have stopped arriving (device held still), relax the
     // velocity so the prediction doesn't keep drifting.
@@ -1254,13 +1301,6 @@
     let accDamp = 1 - (linAccelMag - accLow) / (accHigh - accLow);
     if (accDamp < 0) accDamp = 0; else if (accDamp > 1) accDamp = 1;
 
-    // Signed jerk limiter: ramp keyed off |smoothed signed jerk| (dips on a sign change).
-    const sjerkLow = debugOn ? sjerkLowV : JERK_LOW;
-    const sjerkHigh = debugOn ? sjerkHighV : JERK_HIGH;
-    const absSignedJerk = jerkMag < 0 ? -jerkMag : jerkMag;
-    let sJerkDamp = 1 - (absSignedJerk - sjerkLow) / (sjerkHigh - sjerkLow);
-    if (sJerkDamp < 0) sJerkDamp = 0; else if (sJerkDamp > 1) sJerkDamp = 1;
-
     // AbsJerk limiter: ramp keyed off the rectify-then-smooth envelope.
     const ajerkLow = debugOn ? ajerkLowV : ABSJERK_LOW;
     const ajerkHigh = debugOn ? ajerkHighV : ABSJERK_HIGH;
@@ -1288,26 +1328,37 @@
     // above feed the debug bars; the glided values feed the applied damping.
     const dtMs = frameDt * 1000;
     const accG    = glide(accGl,    accDamp,    accGlide,    accAtkV,    accRelV,    dtMs, true);
-    const sJerkG  = glide(sjerkGl,  sJerkDamp,  sjerkGlide,  sjerkAtkV,  sjerkRelV,  dtMs, true);
     const aJerkG  = glide(ajerkGl,  aJerkDamp,  ajerkGlide,  ajerkAtkV,  ajerkRelV,  dtMs, true);
     const decelG  = glide(decelGl,  decelDamp,  decelGlide,  decelAtkV,  decelRelV,  dtMs, true);
     const angAccG = glide(angAccGl, angAccDamp, angAccGlide, angAccAtkV, angAccRelV, dtMs, true);
 
+    // Drop limiter: ramp the co-moving gate's drop fraction up with the motion's
+    // PEAK speed (velPeak) so slow motions stay springy and fast ones clamp at the
+    // tail. Off -> the static drop field. The gate (in ingestVector) reads dropEff.
+    // "attack" here is the value RISING toward more clamping (attackLower=false).
+    const dropLow = debugOn ? dropLowV : DROP_LOW;
+    const dropHigh = debugOn ? dropHighV : DROP_HIGH;
+    let dropRamp = (velPeak - dropLow) / (dropHigh - dropLow);
+    if (dropRamp < 0) dropRamp = 0; else if (dropRamp > 1) dropRamp = 1;
+    const dropTarget = dropLimiter
+      ? dropMinV + (dropMaxV - dropMinV) * dropRamp
+      : (debugOn ? velDropV : VEL_DROP);
+    dropEff = glide(dropGl, dropTarget, dropGlide, dropAtkV, dropRelV, dtMs, false);
+
     // targetDamp = raw product (tgtDamp bar); damp = glided product (applied).
     let targetDamp = 1, damp = 1;
     if (accelLimiter)      { targetDamp *= accDamp;    damp *= accG; }
-    if (signedJerkLimiter) { targetDamp *= sJerkDamp;  damp *= sJerkG; }
     if (absJerkLimiter)    { targetDamp *= aJerkDamp;  damp *= aJerkG; }
     if (decelLimiter)      { targetDamp *= decelDamp;  damp *= decelG; }
     if (angAccelLimiter)   { targetDamp *= angAccDamp; damp *= angAccG; }
     predAngle *= damp;
 
-    // Target the prediction when on; otherwise the raw reading (pre-update).
+    // Target the prediction when on (Demo and Predicted); otherwise the raw reading.
     const target = prediction ? rotateAround(measVec, angAxis, predAngle) : measVec;
 
     // Inertial settle -- one of three selectable algorithms (settleMode):
-    //  - "original": settle off (inertia=false) -> the easing path in the final else.
-    //  - "main": the main branch's speed-gated spring (below).
+    //  - "velocity": settle off (inertia=false) -> the easing path in the final else.
+    //  - "spring": the main branch's speed-gated spring (below).
     //  - "comoving" (default): velocity-coupled spring on a CO-MOVING setpoint --
     //    while a movement builds/holds (FAST) `cur` is PACED by the angular velocity
     //    (rotated by angSpeed*dt). The strong spring chases a setpoint seeded to
@@ -1316,19 +1367,19 @@
     //    weak anchor reels `cur` onto truth. When the detector flips SLOW the follow
     //    freezes and `cur` settles under the anchor instead of chasing the reading.
     let driveDbg = 1, velDbg = 0, peakDbg = 0;
-    if (inertia && prediction && settleMode === "main") {
-      // Main-branch inertial settle: a speed-gated strong spring tracks the
+    if (inertia && prediction && settleMode === "spring") {
+      // Spring inertial settle: a speed-gated strong spring tracks the
       // absolute led `target` while moving; as measured speed -> 0 the drive fades
       // and `cur` coasts to rest under constant damping. A weak anchor kills drift.
       // No velocity-follow and no FAST/SLOW gate -- its own independent variables.
-      let drive = angSpeed / mainSpeedV; // 1 while moving -> 0 at rest
+      let drive = angSpeed / springSpeedV; // 1 while moving -> 0 at rest
       if (drive > 1) drive = 1; else if (drive < 0) drive = 0;
       driveDbg = drive; velDbg = detVel; peakDbg = velPeak;
-      const kTrack = mainTrackV * drive;
+      const kTrack = springTrackV * drive;
       for (let i = 0; i < 3; i++) {
         const accel = kTrack * (target[i] - cur[i])
-                    + mainAnchorV * (measVec[i] - cur[i])
-                    - mainDampV * curVel[i];
+                    + springAnchorV * (measVec[i] - cur[i])
+                    - springDampV * curVel[i];
         curVel[i] += accel * frameDt;
         cur[i]    += curVel[i] * frameDt;
       }
@@ -1339,11 +1390,12 @@
 
       if (settleFast) {
         if (!wasFast) { springBase = cur.slice(); leadAcc = 0; } // snapshot at onset
-        // Advance the setpoint base with the motion, then bleed out the frozen
-        // onset gap (meas - base) toward truth so it can't accumulate over a long
-        // sweep -- slowly enough that it never snaps.
+        // Advance the setpoint base with the motion, then bleed the onset gap
+        // (meas - base) toward truth so it can't accumulate over a long sweep.
+        // Skip the bleed on the onset frame -- otherwise it would overwrite the
+        // springBase = cur snapshot above and snap cur to raw on a SLOW->FAST flip.
         springBase = rotateAround(springBase, angAxis, angSpeed * frameDt);
-        for (let i = 0; i < 3; i++) springBase[i] += (measVec[i] - springBase[i]) * baseTrackV;
+        if (wasFast) for (let i = 0; i < 3; i++) springBase[i] += (measVec[i] - springBase[i]) * baseTrackV;
         // Grow the lead at the motion's own rate (scaled by `leadrt`) until it
         // reaches the limited predAngle: leadAcc is the rotation accumulated since
         // onset, capped at the full lead. So the lead emerges from motion, no step.
@@ -1377,7 +1429,7 @@
         cur[i]    += curVel[i] * frameDt;
       }
     } else {
-      // Original easing path (prediction off, or inertial settle disabled).
+      // Velocity easing path (prediction off, or inertial settle disabled).
       // Ease toward the target; snap if smoothing is off. With prediction off
       // we use the original 0.15 easing so the comparison is faithful.
       let kSmooth = prediction ? (debugOn ? curSmoothV : CUR_SMOOTH) : OLD_SMOOTH;
@@ -1388,6 +1440,10 @@
     }
     const len = Math.hypot(cur[0], cur[1], cur[2]) || 1;
     const vx = cur[0] / len, vy = cur[1] / len, vz = cur[2] / len;
+    // Raw sensor vector (unprocessed reading) for demo mode's left half.
+    const rlen = Math.hypot(measVec[0], measVec[1], measVec[2]) || 1;
+    const rvx = measVec[0] / rlen, rvy = measVec[1] / rlen, rvz = measVec[2] / rlen;
+    const splitX = W / 2;
 
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = "#000000";
@@ -1397,10 +1453,16 @@
     // dots don't flash at the default orientation on load.
     for (let k = 0; hasData && k < dots.length; k++) {
       const d = dots[k];
+      // Demo mode: drop dots that straddle the divider so the two sides read clean.
+      if (demoMode && Math.abs(d.x - splitX) <= dotRadius + 0.5) continue;
       const t = d.target;
+      // Demo mode: dots left of the divider read the raw sensor vector, dots to the
+      // right read the predicted vector. Otherwise everything uses the predicted one.
+      let ox = vx, oy = vy, oz = vz;
+      if (demoMode && d.x < splitX) { ox = rvx; oy = rvy; oz = rvz; }
       // Each dot responds to two poles: its target and the antipodal target
       // (-target). Both light the dot the same way; take whichever is closer.
-      let dot = vx * t[0] + vy * t[1] + vz * t[2];
+      let dot = ox * t[0] + oy * t[1] + oz * t[2];
       if (dot > 1) dot = 1; else if (dot < -1) dot = -1;
       const angA = Math.acos(dot);   // distance to the target (0 = exact match)
       const angB = Math.acos(-dot);  // distance to the opposite target (= PI - angA)
@@ -1417,18 +1479,34 @@
       ctx.fill();
     }
 
+    // Demo mode divider + side labels (drawn over the dots).
+    if (demoMode && hasData) {
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(splitX, 0);
+      ctx.lineTo(splitX, H);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.font = "600 13px system-ui, -apple-system, sans-serif";
+      ctx.textBaseline = "top";
+      ctx.textAlign = "right";
+      ctx.fillText("RAW", splitX - 12, 12);
+      ctx.textAlign = "left";
+      ctx.fillText("PREDICTED", splitX + 12, 12);
+    }
+
     if (debugOn) {
       dbg.damp = damp;
       dbg.targetDamp = targetDamp;
       dbg.accDamp = accDamp;
-      dbg.sJerkDamp = sJerkDamp;
       dbg.aJerkDamp = aJerkDamp;
       dbg.decelDamp = decelDamp;
       dbg.drive = driveDbg;
       dbg.vel = velDbg;
       dbg.peak = peakDbg;
       dbg.predAngle = predAngle;
-      if (frameDt > 0) dbg.fps += (1 / frameDt - dbg.fps) * 0.1;
       updateDebug();
     }
 
