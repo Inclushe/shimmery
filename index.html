@@ -1135,8 +1135,12 @@
     const elapsed = now - playWall;
     while (playIdx < recBuffer.length && recBuffer[playIdx].t <= elapsed) {
       const ev = recBuffer[playIdx++];
-      if (ev.k === "o") ingestVector(orientationToVector(ev.a, ev.b, ev.g), ev.t);
-      else processMotion(ev.x, ev.y, ev.z, ev.t);
+      // Feed a real-clock timestamp (playWall + recorded offset): the gap between
+      // ticks equals the recorded dt, but the value stays on performance.now()'s
+      // clock so frame()'s staleness check (now - prevMeasTime) reads correctly.
+      const evNow = playWall + ev.t;
+      if (ev.k === "o") ingestVector(orientationToVector(ev.a, ev.b, ev.g), evNow);
+      else processMotion(ev.x, ev.y, ev.z, evNow);
     }
     if (playIdx >= recBuffer.length) { // loop: restart fresh at the seam
       playIdx = 0; playWall = now; resetSensorState();
