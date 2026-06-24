@@ -440,7 +440,7 @@
       <button type="button" class="rec-btn" id="recRecordBtn">● Rec</button>
       <button type="button" class="rec-btn" id="recPlayBtn">▶ Play</button>
       <span class="rec-status" id="recStatus"></span>
-      <input type="file" id="recFileInput" accept="application/json,.json" hidden />
+      <input type="file" id="recFileInput" accept=".gzip,.gz,application/gzip" hidden />
     </div>
 
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
@@ -1182,31 +1182,34 @@
   // A clip is { v, events, outputs }. `outputs` is reserved (empty) for a future
   // feature: per-algorithm frame() outputs (predicted positions) from these same
   // ticks. Not populated or consumed here.
-  function saveRecording() {
+  async function saveRecording() {
     if (!recBuffer.length) return;
     const clip = { v: 1, events: recBuffer, outputs: null };
-    const blob = new Blob([JSON.stringify(clip)], { type: "application/json" });
+    // Gzip the JSON via the Compression Streams API before download.
+    const gz = new Blob([JSON.stringify(clip)], { type: "application/json" })
+      .stream()
+      .pipeThrough(new CompressionStream("gzip"));
+    const blob = await new Response(gz).blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "shimmery-recording-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+    a.download = "shimmery-recording-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json.gzip";
     a.click();
     URL.revokeObjectURL(url);
   }
-  function loadRecording(file) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result);
-        const events = Array.isArray(data) ? data : data && data.events;
-        if (Array.isArray(events)) {
-          stopPlayback();
-          recBuffer = events;
-          updateRecUI();
-        }
-      } catch (_) { /* ignore malformed file */ }
-    };
-    reader.readAsText(file);
+  async function loadRecording(file) {
+    try {
+      // Gunzip the file stream, then parse the JSON.
+      const stream = file.stream().pipeThrough(new DecompressionStream("gzip"));
+      const text = await new Response(stream).text();
+      const data = JSON.parse(text);
+      const events = Array.isArray(data) ? data : data && data.events;
+      if (Array.isArray(events)) {
+        stopPlayback();
+        recBuffer = events;
+        updateRecUI();
+      }
+    } catch (_) { /* ignore malformed or non-gzip file */ }
   }
 
   // DOM wiring for the recording bar.
