@@ -1130,6 +1130,20 @@
     prevMotionTime = 0; prevLinAccelMag = 0;
   }
 
+  // Full clean start for a deterministic run: the finite-difference reset above
+  // plus the integrator + FAST/SLOW gate + smoothed-signal state, so stepping a
+  // clip from here is reproducible regardless of prior state. Tests call this
+  // before feeding a clip; production doesn't need it (live state is continuous).
+  function resetSimState() {
+    resetSensorState();
+    cur = [0, 0, 1]; curVel = [0, 0, 0];
+    springBase = [0, 0, 1]; leadAcc = 0;
+    wasFast = false; settleFast = false;
+    velPeak = 0; velValley = 0; detVel = 0;
+    angSpeed = 0; angDecel = 0; angAccel = 0;
+    linAccelMag = 0; absJerk = 0;
+  }
+
   function playbackTick(now) {
     if (!playing) return;
     const elapsed = now - playWall;
@@ -1427,23 +1441,13 @@
     return 0;
   }
 
-  // --- Render loop ------------------------------------------------------
-  function frame(ts) {
-    const now = ts || performance.now();
-    // Clamp dt so a frame-rate hitch can't push the explicit integrators past
-    // their stability bound (damp < 2/dt). At <=45fps-equiv we just advance a
-    // bit less than real time for that frame — imperceptible, keeps tuning safe.
-    const realDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
-    let frameDt = realDt;
-    if (frameDt > 1 / 45) frameDt = 1 / 45;
-    lastFrameTime = now;
-    // Always-on fps (from the unclamped delta, so it can read below 45). Smoothed,
-    // shown in the Debug label; throttled so it isn't relaid out every frame.
-    if (realDt > 0) dbg.fps += (1 / realDt - dbg.fps) * 0.1;
-    if (now - lastFpsShown > 250) {
-      fpsTag.textContent = dbg.fps.toFixed(0) + " fps";
-      lastFpsShown = now;
-    }
+  // --- Prediction / settle step (pure) ---------------------------------
+  // Takes injected (now, dt) — from the rAF driver in production or a synthetic
+  // driver in tests — so it reads no wall clock and touches no DOM. Advances the
+  // sim state (cur/curVel/springBase/leadAcc/gate) and stashes debug read-backs
+  // into `dbg`. Returns the predicted vector `cur`.
+  function stepPrediction(now, dt) {
+    const frameDt = dt;
 
     // If readings have stopped arriving (device held still), relax the
     // velocity so the prediction doesn't keep drifting.
@@ -1613,6 +1617,24 @@
       cur[1] += (target[1] - cur[1]) * kSmooth;
       cur[2] += (target[2] - cur[2]) * kSmooth;
     }
+
+    // Debug read-backs (plain object writes, no DOM). The overlay itself is
+    // drawn in renderFrame() only when debug is on.
+    dbg.damp = damp;
+    dbg.targetDamp = targetDamp;
+    dbg.accDamp = accDamp;
+    dbg.aJerkDamp = aJerkDamp;
+    dbg.decelDamp = decelDamp;
+    dbg.drive = driveDbg;
+    dbg.vel = velDbg;
+    dbg.peak = peakDbg;
+    dbg.predAngle = predAngle;
+    return cur;
+  }
+
+  // --- Render (DOM / canvas) -------------------------------------------
+  // Draws the current sim state. Not called by tests.
+  function renderFrame() {
     const len = Math.hypot(cur[0], cur[1], cur[2]) || 1;
     const vx = cur[0] / len, vy = cur[1] / len, vz = cur[2] / len;
     // Raw sensor vector (unprocessed reading) for demo mode's left half.
@@ -1672,19 +1694,31 @@
       ctx.fillText("PREDICTED", splitX + 12, 12);
     }
 
-    if (debugOn) {
-      dbg.damp = damp;
-      dbg.targetDamp = targetDamp;
-      dbg.accDamp = accDamp;
-      dbg.aJerkDamp = aJerkDamp;
-      dbg.decelDamp = decelDamp;
-      dbg.drive = driveDbg;
-      dbg.vel = velDbg;
-      dbg.peak = peakDbg;
-      dbg.predAngle = predAngle;
-      updateDebug();
+    if (debugOn) updateDebug();
+  }
+
+  // --- Render loop (rAF driver) ----------------------------------------
+  // Owns the wall clock: measures now/dt, runs the sim step with those injected,
+  // renders, and reschedules. Tests drive stepPrediction() directly instead.
+  function frame(ts) {
+    const now = ts || performance.now();
+    // Clamp dt so a frame-rate hitch can't push the explicit integrators past
+    // their stability bound (damp < 2/dt). At <=45fps-equiv we just advance a
+    // bit less than real time for that frame — imperceptible, keeps tuning safe.
+    const realDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
+    let frameDt = realDt;
+    if (frameDt > 1 / 45) frameDt = 1 / 45;
+    lastFrameTime = now;
+    // Always-on fps (from the unclamped delta, so it can read below 45). Smoothed,
+    // shown in the Debug label; throttled so it isn't relaid out every frame.
+    if (realDt > 0) dbg.fps += (1 / realDt - dbg.fps) * 0.1;
+    if (now - lastFpsShown > 250) {
+      fpsTag.textContent = dbg.fps.toFixed(0) + " fps";
+      lastFpsShown = now;
     }
 
+    stepPrediction(now, frameDt);
+    renderFrame();
     requestAnimationFrame(frame);
   }
 
@@ -1772,6 +1806,17 @@
 
   window.addEventListener("resize", buildGrid);
   window.addEventListener("orientationchange", () => setTimeout(buildGrid, 200));
+
+  // Test seam: expose the clock-free algorithm entry points so a headless driver
+  // can step the prediction with injected time (no rAF) and read the output. Not
+  // used in production; see resetSimState()/stepPrediction() above.
+  window.__shimmer = {
+    stepPrediction, ingestVector, processMotion, orientationToVector, resetSimState,
+    getCur: () => cur.slice(),
+    getMeas: () => measVec.slice(),
+    setSettleMode,                          // "velocity" | "spring" | "comoving"
+    setOrientationMode: (m) => setMode(m),  // "raw" | "demo" | "predicted"
+  };
 
   buildDebug();
   buildGrid();
