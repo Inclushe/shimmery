@@ -169,6 +169,25 @@
   .presets button:active { background: rgba(255,255,255,0.18); }
   .presets button.active { background: #fff; color: #14161e; border-color: #fff; }
 
+  /* Sensor recording / playback bar (full-width, spans both columns) */
+  .rec-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-left: 14px; }
+  .rec-bar .rec-btn {
+    padding: 5px 12px;
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 999px;
+    background: rgba(20,22,30,0.6); color: rgba(255,255,255,0.85);
+    font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    cursor: pointer; transition: background .15s ease, color .15s ease;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .rec-bar .rec-btn:active { background: rgba(255,255,255,0.18); }
+  .rec-bar .rec-btn.active { background: #fff; color: #14161e; border-color: #fff; }
+  .rec-bar .rec-btn.rec-on { background: #ff5b5b; color: #fff; border-color: #ff5b5b; }
+  .rec-bar .rec-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .rec-status {
+    font: 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: rgba(255,255,255,0.55); font-variant-numeric: tabular-nums;
+  }
+
   /* Info button (bottom-right) */
   #infoBtn {
     position: fixed;
@@ -188,8 +207,8 @@
   #infoBtn:active { transform: scale(0.94); }
   #infoBtn svg { width: 22px; height: 22px; }
 
-  /* Info modal (and the motion-fix modal, which shares its styling) */
-  #infoModal, #fixModal {
+  /* Info modal (and the motion-fix + test-results modals, which share its styling) */
+  #infoModal, #fixModal, #testModal {
     position: fixed; inset: 0; z-index: 20;
     display: flex; align-items: center; justify-content: center;
     padding: 24px;
@@ -197,8 +216,8 @@
     backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
     transition: opacity .2s ease;
   }
-  #infoModal.hidden, #fixModal.hidden { opacity: 0; pointer-events: none; }
-  #infoCard, #fixCard {
+  #infoModal.hidden, #fixModal.hidden, #testModal.hidden { opacity: 0; pointer-events: none; }
+  #infoCard, #fixCard, #testCard {
     position: relative;
     max-width: 320px; width: 100%;
     padding: 24px 22px;
@@ -208,16 +227,29 @@
     color: #fff;
     box-shadow: 0 12px 40px rgba(0,0,0,0.5);
   }
-  #fixCard { max-height: 80vh; overflow-y: auto; }
-  #infoCard h2, #fixCard h2 { font-size: 17px; margin-bottom: 8px; }
-  #infoCard p, #fixCard p { font-size: 14px; line-height: 1.5; color: rgba(255,255,255,0.8); }
+  #fixCard, #testCard { max-height: 80vh; overflow-y: auto; }
+  #testCard { max-width: 420px; }
+  #infoCard h2, #fixCard h2, #testCard h2 { font-size: 17px; margin-bottom: 8px; }
+  #infoCard p, #fixCard p, #testCard p { font-size: 14px; line-height: 1.5; color: rgba(255,255,255,0.8); }
   #infoCard a, #fixCard a { color: #7db4ff; }
-  #infoClose, #fixClose {
+  /* Test-results list */
+  #testSummary { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+  .test-row {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+    padding: 4px 0; border-top: 1px solid rgba(255,255,255,0.08);
+    font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .test-row .test-name { color: rgba(255,255,255,0.8); }
+  .test-row .test-verdict { font-weight: 700; white-space: nowrap; }
+  .test-row.test-pass .test-verdict { color: #5ec26b; }
+  .test-row.test-fail .test-verdict { color: #ff5b5b; }
+  .test-row .test-detail { display: block; color: rgba(255,255,255,0.45); font-size: 10px; }
+  #infoClose, #fixClose, #testClose {
     position: absolute; top: 8px; right: 12px;
     border: none; background: none; color: rgba(255,255,255,0.6);
     font-size: 26px; line-height: 1; cursor: pointer; padding: 4px;
   }
-  #infoClose:active, #fixClose:active { color: #fff; }
+  #infoClose:active, #fixClose:active, #testClose:active { color: #fff; }
   #fixCard p { margin-top: 10px; }
   #fixCard b { color: #fff; font-weight: 600; }
   #fixCard details { margin-top: 14px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 12px; }
@@ -412,6 +444,20 @@
     </div>
     </div>
 
+    <!-- Sensor recording / playback: capture the raw orientation+accel stream and
+         replay it through the live pipeline so frame() re-predicts it with whatever
+         algorithm is selected. Save/Load persist a clip to disk. -->
+    <div class="full rec-bar">
+      <button type="button" class="rec-btn" id="recSaveBtn">Save</button>
+      <button type="button" class="rec-btn" id="recLoadBtn">Load</button>
+      <button type="button" class="rec-btn" id="recRecordBtn">● Rec</button>
+      <button type="button" class="rec-btn" id="recPlayBtn">▶ Play</button>
+      <button type="button" class="rec-btn" id="recTestsBtn">● Rec tests</button>
+      <button type="button" class="rec-btn" id="recVerifyBtn">Verify</button>
+      <span class="rec-status" id="recStatus"></span>
+      <input type="file" id="recFileInput" accept=".gzip,.gz,application/gzip" hidden />
+    </div>
+
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
     <label id="sizeRow">Size <input type="range" id="sizeSlider" min="0.5" max="6" step="0.1" value="6" /></label>
   </div>
@@ -429,6 +475,15 @@
       <button id="infoClose" aria-label="Close">&times;</button>
       <h2 id="infoTitle">About</h2>
       <p>Inspired by <a href="https://x.com/pomis172/status/2060124647320928655" target="_blank" rel="noopener noreferrer">this tweet</a>.</p>
+    </div>
+  </div>
+
+  <div id="testModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="testTitle">
+    <div id="testCard">
+      <button id="testClose" aria-label="Close">&times;</button>
+      <h2 id="testTitle">Test results</h2>
+      <div id="testSummary"></div>
+      <div id="testBody"></div>
     </div>
   </div>
 
@@ -941,6 +996,14 @@
   let prevLinAccelMag = 0;       // previous linear-accel magnitude, for the jerk finite-difference
   let prevMotionTime = 0;        // timestamp of the last devicemotion sample (ms)
 
+  // --- Sensor recording / playback state --------------------------------
+  let recording = false, playing = false;   // mutually exclusive
+  let recordingTests = false;    // true when the current recording is a Rec Tests run
+  let recBuffer = [];            // recorded ticks: { t, k:"o", a,b,g } | { t, k:"m", x,y,z }
+  let testRuns = null;           // generated/loaded test runs: [{ algo,preset,enabled,config,frames,outputs }]
+  let recStartWall = 0;          // performance.now() at record start (t is ms past this)
+  let playWall = 0, playIdx = 0, playRaf = 0; // playback cursor + its rAF handle
+
   // Convert (alpha, beta, gamma) Euler angles (degrees, ZXY order per the
   // W3C DeviceOrientation spec) into a quaternion, then rotate [0,0,1].
   function orientationToVector(alphaDeg, betaDeg, gammaDeg) {
@@ -983,8 +1046,8 @@
   // Take a freshly measured orientation vector and update both the latest
   // value and the angular-velocity estimate (by finite difference). Shared
   // by the sensor and the pointer fallback.
-  function ingestVector(newVec) {
-    const now = performance.now();
+  function ingestVector(newVec, nowOverride) {
+    const now = nowOverride != null ? nowOverride : performance.now();
     if (prevMeas) {
       const dt = (now - prevMeasTime) / 1000;
       if (dt > 0) {
@@ -1039,7 +1102,9 @@
   }
 
   function onOrientation(e) {
+    if (playing) return; // ignore live sensor while replaying a recording
     if (e.alpha == null && e.beta == null && e.gamma == null) return;
+    if (recording) recBuffer.push({ t: performance.now() - recStartWall, k: "o", a: e.alpha, b: e.beta, g: e.gamma });
     ingestVector(orientationToVector(e.alpha, e.beta, e.gamma));
   }
 
@@ -1048,10 +1113,17 @@
   // motion (moving the phone through space), distinct from the angular/rotational
   // signals (angSpeed/angDecel) derived from DeviceOrientation.
   function onMotion(e) {
+    if (playing) return; // ignore live sensor while replaying a recording
     const lin = e.acceleration;
     if (!lin) return; // device either reports `acceleration` or it doesn't
-    const now = performance.now();
-    const m = Math.hypot(lin.x || 0, lin.y || 0, lin.z || 0);
+    if (recording) recBuffer.push({ t: performance.now() - recStartWall, k: "m", x: lin.x, y: lin.y, z: lin.z });
+    processMotion(lin.x, lin.y, lin.z, performance.now());
+  }
+
+  // Core of the motion handler, callable with explicit values + timestamp so the
+  // playback pump can drive it from a recording (passing the recorded `now`).
+  function processMotion(lx, ly, lz, now) {
+    const m = Math.hypot(lx || 0, ly || 0, lz || 0);
     linAccelMag += (m - linAccelMag) * (debugOn ? accSmoothV : ACC_SMOOTH);
 
     // Jerk: rate of change of the (smoothed) acceleration magnitude. `absJerk` is
@@ -1068,6 +1140,391 @@
     prevLinAccelMag = linAccelMag;
     prevMotionTime = now;
   }
+
+  // --- Sensor recording / playback -------------------------------------
+  // Replay drives the SAME ingest path the live sensors use (ingestVector /
+  // processMotion), so frame() re-predicts the recorded ticks with whatever
+  // algorithm is currently selected. A dedicated rAF pump releases ticks at
+  // real-time pace but passes each tick's RECORDED timestamp into the ingest
+  // path, so the internal dt matches the original capture. frame() is untouched.
+
+  // Clear the finite-difference history so the first replayed tick — and the
+  // seam where the loop wraps from the last tick back to the first — can't
+  // compute a bogus dt / velocity spike. (The "start fresh" requirement.)
+  function resetSensorState() {
+    prevMeas = null; prevMeasTime = 0;
+    prevMotionTime = 0; prevLinAccelMag = 0;
+  }
+
+  // Full clean start for a deterministic run: the finite-difference reset above
+  // plus the integrator + FAST/SLOW gate + smoothed-signal state, so stepping a
+  // clip from here is reproducible regardless of prior state. Tests call this
+  // before feeding a clip; production doesn't need it (live state is continuous).
+  function resetSimState() {
+    resetSensorState();
+    cur = [0, 0, 1]; curVel = [0, 0, 0];
+    springBase = [0, 0, 1]; leadAcc = 0;
+    wasFast = false; settleFast = false;
+    velPeak = 0; velValley = 0; detVel = 0;
+    angSpeed = 0; angDecel = 0; angAccel = 0;
+    linAccelMag = 0; absJerk = 0;
+  }
+
+  // Fuller reset for a deterministic TEST run: resetSimState plus the pieces it
+  // doesn't touch (rotation axis, per-limiter glide states, the drop-gate glide/
+  // output, measVec). Seeds the drop glide from the configured static drop, so
+  // call this AFTER applyConfig has set velDropV. Without this a prior run's glide
+  // state would leak and break bit-exact reproducibility.
+  function resetTestState() {
+    resetSimState();
+    angAxis = [0, 0, 1];
+    measVec = [0, 0, 1];
+    accGl.v = 1; ajerkGl.v = 1; decelGl.v = 1; angAccGl.v = 1;
+    dropGl.v = velDropV; dropEff = velDropV;
+  }
+
+  function playbackTick(now) {
+    if (!playing) return;
+    const elapsed = now - playWall;
+    while (playIdx < recBuffer.length && recBuffer[playIdx].t <= elapsed) {
+      const ev = recBuffer[playIdx++];
+      // Feed a real-clock timestamp (playWall + recorded offset): the gap between
+      // ticks equals the recorded dt, but the value stays on performance.now()'s
+      // clock so frame()'s staleness check (now - prevMeasTime) reads correctly.
+      const evNow = playWall + ev.t;
+      if (ev.k === "o") ingestVector(orientationToVector(ev.a, ev.b, ev.g), evNow);
+      else processMotion(ev.x, ev.y, ev.z, evNow);
+    }
+    if (playIdx >= recBuffer.length) { // loop: restart fresh at the seam
+      playIdx = 0; playWall = now; resetSensorState();
+    }
+    playRaf = requestAnimationFrame(playbackTick);
+  }
+
+  function startPlayback() {
+    if (!recBuffer.length || playing) return;
+    if (recording) stopRecording();
+    playing = true;
+    playIdx = 0; playWall = performance.now();
+    resetSensorState();
+    updateRecUI();
+    playRaf = requestAnimationFrame(playbackTick);
+  }
+  function stopPlayback() {
+    if (!playing) return;
+    playing = false;
+    if (playRaf) cancelAnimationFrame(playRaf);
+    playRaf = 0;
+    resetSensorState(); // hand cleanly back to the live sensor
+    updateRecUI();
+  }
+
+  function startRecording(tests) {
+    if (playing) stopPlayback();
+    recBuffer = [];
+    testRuns = null;
+    recStartWall = performance.now();
+    recording = true;
+    recordingTests = !!tests;
+    updateRecUI();
+  }
+  function stopRecording() {
+    if (!recording) return;
+    recording = false;
+    const wasTests = recordingTests;
+    recordingTests = false;
+    // A Rec Tests run post-processes on stop: replay the captured input through
+    // the matrix of algorithms/configs and store the outputs (see generateTests).
+    if (wasTests && recBuffer.length) generateTests();
+    updateRecUI();
+  }
+
+  // A clip is { v:2, events, tests }. `events` are the raw input ticks; `tests`
+  // (may be null) are the generated test runs — each an algorithm/config plus its
+  // recorded predicted outputs (see generateTests / verifyTests).
+  async function saveRecording() {
+    if (!recBuffer.length) return;
+    const clip = { v: 2, events: recBuffer, tests: testRuns };
+    // Gzip the JSON via the Compression Streams API before download.
+    const gz = new Blob([JSON.stringify(clip)], { type: "application/json" })
+      .stream()
+      .pipeThrough(new CompressionStream("gzip"));
+    const blob = await new Response(gz).blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "shimmery-recording-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json.gzip";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  async function loadRecording(file) {
+    try {
+      // Gunzip the file stream, then parse the JSON.
+      const stream = file.stream().pipeThrough(new DecompressionStream("gzip"));
+      const text = await new Response(stream).text();
+      const data = JSON.parse(text);
+      const events = Array.isArray(data) ? data : data && data.events;
+      if (Array.isArray(events)) {
+        stopPlayback();
+        recBuffer = events;
+        testRuns = (data && Array.isArray(data.tests)) ? data.tests : null;
+        updateRecUI();
+      }
+    } catch (_) { /* ignore malformed or non-gzip file */ }
+  }
+
+  // --- Test framework ---------------------------------------------------
+  // Deterministically replays recorded input through the prediction algorithm for
+  // a matrix of algorithms/configs (Rec tests), and re-checks stored outputs
+  // against the current algorithm (Verify). All headless: no rAF, no canvas.
+
+  // The 7 guards/options iterated per algorithm.
+  const TEST_TOGGLES = ["accelLimiter", "absJerkLimiter", "angAccelLimiter",
+    "decelLimiter", "dropLimiter", "leadComp", "smoothing"];
+  // Map a preset field (input id) to the tunable it drives, mirroring bindThreshold.
+  const PRESET_FIELD_TO_VAR = {
+    stiffInput: "springStiffV", zetaInput: "springZetaV", anchorStiffInput: "anchorV",
+    leadTimeInput: "leadTimeV", coastInput: "coastV", baseTrackInput: "baseTrackV",
+    leadRateInput: "leadRateV", dropInput: "velDropV", riseInput: "velRiseV",
+    vsmoothInput: "velSmoothV", springSpeedInput: "springSpeedV",
+    springTrackInput: "springTrackV", springAnchorInput: "springAnchorV",
+    springDampInput: "springDampV",
+  };
+
+  // Snapshot / restore every debug-editable tunable (the algorithm reads these
+  // `*V` copies when debug is on, which the driver forces).
+  function snapshotValues() {
+    return {
+      accLowV, accHighV, accSmoothV, accAtkV, accRelV,
+      ajerkLowV, ajerkHighV, ajerkSmoothV, ajerkAtkV, ajerkRelV,
+      decelLowV, decelHighV, decelSmoothV, decelAtkV, decelRelV,
+      angAccLowV, angAccHighV, angAccSmoothV, angAccAtkV, angAccRelV,
+      dropLowV, dropHighV, dropMinV, dropMaxV, dropAtkV, dropRelV,
+      curSmoothV, leadTimeV, anchorV, springStiffV, springZetaV, coastV,
+      baseTrackV, leadRateV, springSpeedV, springTrackV, springAnchorV, springDampV,
+      velDropV, velRiseV, velSmoothV,
+    };
+  }
+  function applyValues(v) {
+    accLowV = v.accLowV; accHighV = v.accHighV; accSmoothV = v.accSmoothV; accAtkV = v.accAtkV; accRelV = v.accRelV;
+    ajerkLowV = v.ajerkLowV; ajerkHighV = v.ajerkHighV; ajerkSmoothV = v.ajerkSmoothV; ajerkAtkV = v.ajerkAtkV; ajerkRelV = v.ajerkRelV;
+    decelLowV = v.decelLowV; decelHighV = v.decelHighV; decelSmoothV = v.decelSmoothV; decelAtkV = v.decelAtkV; decelRelV = v.decelRelV;
+    angAccLowV = v.angAccLowV; angAccHighV = v.angAccHighV; angAccSmoothV = v.angAccSmoothV; angAccAtkV = v.angAccAtkV; angAccRelV = v.angAccRelV;
+    dropLowV = v.dropLowV; dropHighV = v.dropHighV; dropMinV = v.dropMinV; dropMaxV = v.dropMaxV; dropAtkV = v.dropAtkV; dropRelV = v.dropRelV;
+    curSmoothV = v.curSmoothV; leadTimeV = v.leadTimeV; anchorV = v.anchorV; springStiffV = v.springStiffV; springZetaV = v.springZetaV; coastV = v.coastV;
+    baseTrackV = v.baseTrackV; leadRateV = v.leadRateV; springSpeedV = v.springSpeedV; springTrackV = v.springTrackV; springAnchorV = v.springAnchorV; springDampV = v.springDampV;
+    velDropV = v.velDropV; velRiseV = v.velRiseV; velSmoothV = v.velSmoothV;
+  }
+
+  // Overlay a preset's settle knobs onto a base value snapshot (no live mutation).
+  function presetValues(base, settleMode, presetName) {
+    const out = { ...base };
+    const preset = settleMode === "spring" ? springPresets[presetName]
+                 : settleMode === "comoving" ? comovingPresets[presetName] : null;
+    if (preset) {
+      for (const field in preset) {
+        const key = PRESET_FIELD_TO_VAR[field];
+        if (!key) continue;
+        out[key] = field === "leadTimeInput" ? preset[field] / 1000 : preset[field]; // ms -> s
+      }
+    }
+    return out;
+  }
+
+  // Apply a run config to live state (flags + settle mode + tunables). No DOM.
+  function applyConfig(config) {
+    settleMode = config.settleMode;
+    inertia = settleMode !== "velocity";
+    prediction = true;
+    debugOn = true; // force the `debugOn ? xV : CONST` reads onto the injected *V
+    const f = config.flags;
+    accelLimiter = f.accelLimiter; absJerkLimiter = f.absJerkLimiter;
+    angAccelLimiter = f.angAccelLimiter; decelLimiter = f.decelLimiter;
+    dropLimiter = f.dropLimiter; leadComp = f.leadComp; smoothing = f.smoothing;
+    applyValues(config.values);
+  }
+
+  // Save / restore all state the driver mutates, so live rendering is undisturbed.
+  function snapshotLiveState() {
+    return {
+      settleMode, inertia, prediction, debugOn,
+      flags: { accelLimiter, absJerkLimiter, angAccelLimiter, decelLimiter, dropLimiter, leadComp, smoothing },
+      values: snapshotValues(),
+      sim: {
+        cur: cur.slice(), curVel: curVel.slice(), springBase: springBase.slice(), leadAcc, wasFast,
+        angSpeed, detVel, velPeak, velValley, settleFast, angDecel, angAccel, angAxis: angAxis.slice(),
+        linAccelMag, absJerk, prevLinAccelMag, measVec: measVec.slice(),
+        prevMeas: prevMeas ? prevMeas.slice() : null, prevMeasTime, prevMotionTime, hasData,
+        accGl: accGl.v, ajerkGl: ajerkGl.v, decelGl: decelGl.v, angAccGl: angAccGl.v, dropGl: dropGl.v, dropEff,
+      },
+    };
+  }
+  function restoreLiveState(s) {
+    settleMode = s.settleMode; inertia = s.inertia; prediction = s.prediction; debugOn = s.debugOn;
+    accelLimiter = s.flags.accelLimiter; absJerkLimiter = s.flags.absJerkLimiter;
+    angAccelLimiter = s.flags.angAccelLimiter; decelLimiter = s.flags.decelLimiter;
+    dropLimiter = s.flags.dropLimiter; leadComp = s.flags.leadComp; smoothing = s.flags.smoothing;
+    applyValues(s.values);
+    const m = s.sim;
+    cur = m.cur.slice(); curVel = m.curVel.slice(); springBase = m.springBase.slice(); leadAcc = m.leadAcc; wasFast = m.wasFast;
+    angSpeed = m.angSpeed; detVel = m.detVel; velPeak = m.velPeak; velValley = m.velValley; settleFast = m.settleFast;
+    angDecel = m.angDecel; angAccel = m.angAccel; angAxis = m.angAxis.slice();
+    linAccelMag = m.linAccelMag; absJerk = m.absJerk; prevLinAccelMag = m.prevLinAccelMag; measVec = m.measVec.slice();
+    prevMeas = m.prevMeas ? m.prevMeas.slice() : null; prevMeasTime = m.prevMeasTime; prevMotionTime = m.prevMotionTime; hasData = m.hasData;
+    accGl.v = m.accGl; ajerkGl.v = m.ajerkGl; decelGl.v = m.decelGl; angAccGl.v = m.angAccGl; dropGl.v = m.dropGl; dropEff = m.dropEff;
+  }
+
+  // The deterministic driver: replay `events` through the algorithm under `config`,
+  // stepping at a fixed 60 fps. Sensor ticks are released by their recorded ms
+  // timestamp (same clock as the frame `now`), so ingest dt matches capture and the
+  // staleness guard reads correctly. Returns one predicted vector per frame.
+  function runClip(config, events) {
+    applyConfig(config);
+    resetTestState();
+    const frameMs = 1000 / 60, dt = 1 / 60;
+    const lastT = events.length ? events[events.length - 1].t : 0;
+    const nFrames = Math.floor(lastT / frameMs) + 1;
+    let ei = 0;
+    const out = [];
+    for (let i = 0; i < nFrames; i++) {
+      const simT = i * frameMs;
+      while (ei < events.length && events[ei].t <= simT) {
+        const ev = events[ei++];
+        if (ev.k === "o") ingestVector(orientationToVector(ev.a, ev.b, ev.g), ev.t);
+        else processMotion(ev.x, ev.y, ev.z, ev.t);
+      }
+      stepPrediction(simT, dt);
+      out.push(cur.slice());
+    }
+    return out;
+  }
+
+  // The (settleMode, preset) algorithms to test. Velocity has no preset.
+  function testAlgorithms(base) {
+    const list = [{ algo: "velocity", preset: null, values: base }];
+    for (const p of Object.keys(springPresets)) list.push({ algo: "spring", preset: p, values: presetValues(base, "spring", p) });
+    for (const p of Object.keys(comovingPresets)) list.push({ algo: "comoving", preset: p, values: presetValues(base, "comoving", p) });
+    return list;
+  }
+  // Per algorithm: a baseline (all toggles off) + one run per single toggle enabled.
+  function testConfigs() {
+    const off = {};
+    for (const t of TEST_TOGGLES) off[t] = false;
+    const runs = [{ enabled: "baseline", flags: { ...off } }];
+    for (const t of TEST_TOGGLES) runs.push({ enabled: t, flags: { ...off, [t]: true } });
+    return runs;
+  }
+
+  // Rec tests stop-hook: compute every run's outputs and store them in testRuns.
+  function generateTests() {
+    const base = snapshotValues();
+    const saved = snapshotLiveState();
+    const runs = [];
+    try {
+      for (const alg of testAlgorithms(base)) {
+        for (const cfg of testConfigs()) {
+          const config = { settleMode: alg.algo, flags: cfg.flags, values: alg.values };
+          const out = runClip(config, recBuffer);
+          runs.push({ algo: alg.algo, preset: alg.preset, enabled: cfg.enabled, config, frames: out.length, outputs: out });
+        }
+      }
+    } finally { restoreLiveState(saved); }
+    testRuns = runs;
+  }
+
+  // Verify: re-run each stored config through the CURRENT algorithm and compare
+  // outputs bit-exactly to what was stored. Reports pass/fail per run.
+  function verifyTests() {
+    if (!testRuns || !testRuns.length || !recBuffer.length) return;
+    const saved = snapshotLiveState();
+    const results = [];
+    try {
+      for (const test of testRuns) {
+        const out = runClip(test.config, recBuffer);
+        const exp = test.outputs || [];
+        let pass = out.length === exp.length;
+        let bad = -1;
+        if (pass) {
+          for (let i = 0; i < out.length; i++) {
+            if (out[i][0] !== exp[i][0] || out[i][1] !== exp[i][1] || out[i][2] !== exp[i][2]) { pass = false; bad = i; break; }
+          }
+        } else {
+          bad = Math.min(out.length, exp.length);
+        }
+        results.push({ test, pass, bad, got: bad >= 0 ? out[bad] : null, want: bad >= 0 ? exp[bad] : null });
+      }
+    } finally { restoreLiveState(saved); }
+    showTestModal(results);
+  }
+
+  const testModal = document.getElementById("testModal");
+  function showTestModal(results) {
+    const passed = results.filter((r) => r.pass).length;
+    const summary = document.getElementById("testSummary");
+    const body = document.getElementById("testBody");
+    summary.textContent = passed + "/" + results.length + " passed";
+    summary.style.color = passed === results.length ? "#5ec26b" : "#ff5b5b";
+    const fmt = (v) => v ? "[" + v.map((n) => n.toFixed(4)).join(", ") + "]" : "—";
+    body.innerHTML = "";
+    for (const r of results) {
+      const row = document.createElement("div");
+      row.className = "test-row " + (r.pass ? "test-pass" : "test-fail");
+      const name = r.test.algo + (r.test.preset ? "/" + r.test.preset : "") + " · " + r.test.enabled;
+      const detail = r.pass ? "" :
+        "<span class=\"test-detail\">frame " + r.bad + ": got " + fmt(r.got) + " want " + fmt(r.want) + "</span>";
+      row.innerHTML = "<span class=\"test-name\">" + name + detail + "</span>" +
+        "<span class=\"test-verdict\">" + (r.pass ? "PASS" : "FAIL") + "</span>";
+      body.appendChild(row);
+    }
+    testModal.classList.remove("hidden");
+  }
+  document.getElementById("testClose").addEventListener("click", () => testModal.classList.add("hidden"));
+  testModal.addEventListener("click", (e) => { if (e.target === testModal) testModal.classList.add("hidden"); });
+
+  // DOM wiring for the recording bar.
+  const recSaveBtn = document.getElementById("recSaveBtn");
+  const recLoadBtn = document.getElementById("recLoadBtn");
+  const recRecordBtn = document.getElementById("recRecordBtn");
+  const recPlayBtn = document.getElementById("recPlayBtn");
+  const recTestsBtn = document.getElementById("recTestsBtn");
+  const recVerifyBtn = document.getElementById("recVerifyBtn");
+  const recStatus = document.getElementById("recStatus");
+  const recFileInput = document.getElementById("recFileInput");
+
+  function updateRecUI() {
+    const n = recBuffer.length;
+    const plainRec = recording && !recordingTests;
+    const testsRec = recording && recordingTests;
+    recRecordBtn.classList.toggle("rec-on", plainRec);
+    recRecordBtn.textContent = plainRec ? "■ Stop" : "● Rec";
+    recPlayBtn.classList.toggle("active", playing);
+    recPlayBtn.textContent = playing ? "■ Stop" : "▶ Play";
+    recTestsBtn.classList.toggle("rec-on", testsRec);
+    recTestsBtn.textContent = testsRec ? "■ Stop" : "● Rec tests";
+    // While recording or playing, the other transports are locked out.
+    recSaveBtn.disabled = !n || recording;
+    recPlayBtn.disabled = (!n && !playing) || recording;
+    recRecordBtn.disabled = playing || testsRec;
+    recTestsBtn.disabled = playing || plainRec;
+    recVerifyBtn.disabled = !(testRuns && testRuns.length) || recording;
+    recStatus.textContent = testsRec ? "● tests " + n
+      : plainRec ? "● " + n
+      : playing ? "▶ playing"
+      : testRuns && testRuns.length ? testRuns.length + " tests"
+      : n ? n + " ticks" : "no clip";
+  }
+
+  recSaveBtn.addEventListener("click", saveRecording);
+  recLoadBtn.addEventListener("click", () => recFileInput.click());
+  recFileInput.addEventListener("change", () => {
+    if (recFileInput.files && recFileInput.files[0]) loadRecording(recFileInput.files[0]);
+    recFileInput.value = ""; // allow re-loading the same file
+  });
+  recRecordBtn.addEventListener("click", () => { recording ? stopRecording() : startRecording(false); });
+  recPlayBtn.addEventListener("click", () => { playing ? stopPlayback() : startPlayback(); });
+  recTestsBtn.addEventListener("click", () => { recording ? stopRecording() : startRecording(true); });
+  recVerifyBtn.addEventListener("click", verifyTests);
+  updateRecUI();
 
   // --- Debug overlay ----------------------------------------------------
   // Values computed inside frame() that the overlay needs to read back.
@@ -1252,23 +1709,13 @@
     return 0;
   }
 
-  // --- Render loop ------------------------------------------------------
-  function frame(ts) {
-    const now = ts || performance.now();
-    // Clamp dt so a frame-rate hitch can't push the explicit integrators past
-    // their stability bound (damp < 2/dt). At <=45fps-equiv we just advance a
-    // bit less than real time for that frame — imperceptible, keeps tuning safe.
-    const realDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
-    let frameDt = realDt;
-    if (frameDt > 1 / 45) frameDt = 1 / 45;
-    lastFrameTime = now;
-    // Always-on fps (from the unclamped delta, so it can read below 45). Smoothed,
-    // shown in the Debug label; throttled so it isn't relaid out every frame.
-    if (realDt > 0) dbg.fps += (1 / realDt - dbg.fps) * 0.1;
-    if (now - lastFpsShown > 250) {
-      fpsTag.textContent = dbg.fps.toFixed(0) + " fps";
-      lastFpsShown = now;
-    }
+  // --- Prediction / settle step (pure) ---------------------------------
+  // Takes injected (now, dt) — from the rAF driver in production or a synthetic
+  // driver in tests — so it reads no wall clock and touches no DOM. Advances the
+  // sim state (cur/curVel/springBase/leadAcc/gate) and stashes debug read-backs
+  // into `dbg`. Returns the predicted vector `cur`.
+  function stepPrediction(now, dt) {
+    const frameDt = dt;
 
     // If readings have stopped arriving (device held still), relax the
     // velocity so the prediction doesn't keep drifting.
@@ -1438,6 +1885,24 @@
       cur[1] += (target[1] - cur[1]) * kSmooth;
       cur[2] += (target[2] - cur[2]) * kSmooth;
     }
+
+    // Debug read-backs (plain object writes, no DOM). The overlay itself is
+    // drawn in renderFrame() only when debug is on.
+    dbg.damp = damp;
+    dbg.targetDamp = targetDamp;
+    dbg.accDamp = accDamp;
+    dbg.aJerkDamp = aJerkDamp;
+    dbg.decelDamp = decelDamp;
+    dbg.drive = driveDbg;
+    dbg.vel = velDbg;
+    dbg.peak = peakDbg;
+    dbg.predAngle = predAngle;
+    return cur;
+  }
+
+  // --- Render (DOM / canvas) -------------------------------------------
+  // Draws the current sim state. Not called by tests.
+  function renderFrame() {
     const len = Math.hypot(cur[0], cur[1], cur[2]) || 1;
     const vx = cur[0] / len, vy = cur[1] / len, vz = cur[2] / len;
     // Raw sensor vector (unprocessed reading) for demo mode's left half.
@@ -1497,19 +1962,31 @@
       ctx.fillText("PREDICTED", splitX + 12, 12);
     }
 
-    if (debugOn) {
-      dbg.damp = damp;
-      dbg.targetDamp = targetDamp;
-      dbg.accDamp = accDamp;
-      dbg.aJerkDamp = aJerkDamp;
-      dbg.decelDamp = decelDamp;
-      dbg.drive = driveDbg;
-      dbg.vel = velDbg;
-      dbg.peak = peakDbg;
-      dbg.predAngle = predAngle;
-      updateDebug();
+    if (debugOn) updateDebug();
+  }
+
+  // --- Render loop (rAF driver) ----------------------------------------
+  // Owns the wall clock: measures now/dt, runs the sim step with those injected,
+  // renders, and reschedules. Tests drive stepPrediction() directly instead.
+  function frame(ts) {
+    const now = ts || performance.now();
+    // Clamp dt so a frame-rate hitch can't push the explicit integrators past
+    // their stability bound (damp < 2/dt). At <=45fps-equiv we just advance a
+    // bit less than real time for that frame — imperceptible, keeps tuning safe.
+    const realDt = lastFrameTime ? (now - lastFrameTime) / 1000 : 1 / 60;
+    let frameDt = realDt;
+    if (frameDt > 1 / 45) frameDt = 1 / 45;
+    lastFrameTime = now;
+    // Always-on fps (from the unclamped delta, so it can read below 45). Smoothed,
+    // shown in the Debug label; throttled so it isn't relaid out every frame.
+    if (realDt > 0) dbg.fps += (1 / realDt - dbg.fps) * 0.1;
+    if (now - lastFpsShown > 250) {
+      fpsTag.textContent = dbg.fps.toFixed(0) + " fps";
+      lastFpsShown = now;
     }
 
+    stepPrediction(now, frameDt);
+    renderFrame();
     requestAnimationFrame(frame);
   }
 
@@ -1597,6 +2074,17 @@
 
   window.addEventListener("resize", buildGrid);
   window.addEventListener("orientationchange", () => setTimeout(buildGrid, 200));
+
+  // Test seam: expose the clock-free algorithm entry points so a headless driver
+  // can step the prediction with injected time (no rAF) and read the output. Not
+  // used in production; see resetSimState()/stepPrediction() above.
+  window.__shimmer = {
+    stepPrediction, ingestVector, processMotion, orientationToVector, resetSimState,
+    getCur: () => cur.slice(),
+    getMeas: () => measVec.slice(),
+    setSettleMode,                          // "velocity" | "spring" | "comoving"
+    setOrientationMode: (m) => setMode(m),  // "raw" | "demo" | "predicted"
+  };
 
   buildDebug();
   buildGrid();
