@@ -1559,22 +1559,22 @@
             // Angular deceleration (rad/s^2), rectified to the slowing-down part
             // only and EMA-smoothed; drives the Angular decel limiter.
             const decel = Math.max(0, (prevSpeed - angSpeed) / dt);
-            angDecel += (decel - angDecel) * (debugOn ? decelSmoothV : DECEL_SMOOTH);
+            angDecel += (decel - angDecel) * decelSmoothV;
             // Angular acceleration (rad/s^2), rectified to the speeding-up part only;
             // drives the Angular accel limiter (damp the prediction at rotation onset).
             const angAcc = Math.max(0, (angSpeed - prevSpeed) / dt);
-            angAccel += (angAcc - angAccel) * (debugOn ? angAccSmoothV : ANGACC_SMOOTH);
+            angAccel += (angAcc - angAccel) * angAccSmoothV;
             // Detector velocity feeding the FAST/SLOW peak-detector: a (re)smoothed
             // copy of the measured angSpeed (vsmooth = 1.0 follows it raw, for A/B;
             // lower smooths shake reversals where speed dips to ~0 each cycle).
-            const detSmooth = debugOn ? velSmoothV : VEL_DET_SMOOTH;
+            const detSmooth = velSmoothV;
             detVel += (angSpeed - detVel) * detSmooth;
             const gateVel = detVel;
             // Peak/valley state machine: FAST while gateVel climbs/holds at its peak;
             // SLOW once it falls below VEL_DROP of the peak (movement winding down,
             // latched to rest); re-arm FAST when it rises VEL_RISE above its valley.
             const dropFrac = dropEff; // static drop, or the drop limiter's ramped value
-            const riseAbs = debugOn ? velRiseV : VEL_RISE;
+            const riseAbs = velRiseV;
             if (settleFast) {
               if (gateVel > velPeak) velPeak = gateVel;
               else if (gateVel < velPeak * dropFrac) { settleFast = false; velValley = gateVel; }
@@ -1605,7 +1605,7 @@
       // Track the magnitude of LINEAR acceleration (gravity excluded) from the
       // accelerometer. Feeds the Linear accel + jerk limiters. This is translational
       // motion (moving the phone through space), distinct from the angular/rotational
-      // signals (angSpeed/angDecel) derived from DeviceOrientation.
+      // signals (angSpeed/angDecel) derived from DeviceOrientation. 
       function onMotion(e) {
         if (playing) return; // ignore live sensor while replaying a recording
         const lin = e.acceleration;
@@ -1618,7 +1618,7 @@
       // playback pump can drive it from a recording (passing the recorded `now`).
       function processMotion(lx, ly, lz, now) {
         const m = Math.hypot(lx || 0, ly || 0, lz || 0);
-        linAccelMag += (m - linAccelMag) * (debugOn ? accSmoothV : ACC_SMOOTH);
+        linAccelMag += (m - linAccelMag) * accSmoothV;
 
         // Jerk: rate of change of the (smoothed) acceleration magnitude. `absJerk` is
         // the rectify-then-smooth envelope (EMA of |raw jerk|) that drives the limiter;
@@ -1627,7 +1627,7 @@
           const dt = (now - prevMotionTime) / 1000;
           if (dt > 0) {
             const rawJerk = (linAccelMag - prevLinAccelMag) / dt;
-            absJerk += (Math.abs(rawJerk) - absJerk) * (debugOn ? ajerkSmoothV : ABSJERK_SMOOTH);
+            absJerk += (Math.abs(rawJerk) - absJerk) * ajerkSmoothV;
             dbg.motHz += (1 / dt - dbg.motHz) * 0.1; // DeviceMotion sample rate (debug)
           }
         }
@@ -1830,7 +1830,7 @@
         settleMode = config.settleMode;
         inertia = settleMode !== "velocity";
         prediction = true;
-        debugOn = true; // force the `debugOn ? xV : CONST` reads onto the injected *V
+        debugOn = true; // force debug on
         const f = config.flags;
         accelLimiter = f.accelLimiter; absJerkLimiter = f.absJerkLimiter;
         angAccelLimiter = f.angAccelLimiter; decelLimiter = f.decelLimiter;
@@ -2253,29 +2253,29 @@
         // Linear accel limiter: as LINEAR acceleration (DeviceMotion) rises from ACC_LOW to ACC_HIGH, ramp
         // the prediction down to zero so a fast shove can't amplify jitter.
         // (In debug mode the band is taken from the live editors, else the constants.)
-        const accLow = debugOn ? accLowV : ACC_LOW;
-        const accHigh = debugOn ? accHighV : ACC_HIGH;
+        const accLow = accLowV;
+        const accHigh = accHighV;
         let accDamp = 1 - (linAccelMag - accLow) / (accHigh - accLow);
         if (accDamp < 0) accDamp = 0; else if (accDamp > 1) accDamp = 1;
 
         // AbsJerk limiter: ramp keyed off the rectify-then-smooth envelope.
-        const ajerkLow = debugOn ? ajerkLowV : ABSJERK_LOW;
-        const ajerkHigh = debugOn ? ajerkHighV : ABSJERK_HIGH;
+        const ajerkLow = ajerkLowV;
+        const ajerkHigh = ajerkHighV;
         let aJerkDamp = 1 - (absJerk - ajerkLow) / (ajerkHigh - ajerkLow);
         if (aJerkDamp < 0) aJerkDamp = 0; else if (aJerkDamp > 1) aJerkDamp = 1;
 
         // Angular decel limiter (idea 1): ramp keyed off ANGULAR deceleration (rotation
         // rate slowing, from DeviceOrientation), damping the prediction as a rotation
         // ends abruptly so the lagging lead can't overshoot.
-        const decLow = debugOn ? decelLowV : DECEL_LOW;
-        const decHigh = debugOn ? decelHighV : DECEL_HIGH;
+        const decLow = decelLowV;
+        const decHigh = decelHighV;
         let decelDamp = 1 - (angDecel - decLow) / (decHigh - decLow);
         if (decelDamp < 0) decelDamp = 0; else if (decelDamp > 1) decelDamp = 1;
 
         // Angular accel limiter: ramp keyed off angular acceleration (rotation onset),
         // damping the prediction as a flick starts so a sharp start can't overshoot.
-        const aaLow = debugOn ? angAccLowV : ANGACC_LOW;
-        const aaHigh = debugOn ? angAccHighV : ANGACC_HIGH;
+        const aaLow = angAccLowV;
+        const aaHigh = angAccHighV;
         let angAccDamp = 1 - (angAccel - aaLow) / (aaHigh - aaLow);
         if (angAccDamp < 0) angAccDamp = 0; else if (angAccDamp > 1) angAccDamp = 1;
 
@@ -2293,13 +2293,13 @@
         // PEAK speed (velPeak) so slow motions stay springy and fast ones clamp at the
         // tail. Off -> the static drop field. The gate (in ingestVector) reads dropEff.
         // "attack" here is the value RISING toward more clamping (attackLower=false).
-        const dropLow = debugOn ? dropLowV : DROP_LOW;
-        const dropHigh = debugOn ? dropHighV : DROP_HIGH;
+        const dropLow = dropLowV;
+        const dropHigh = dropHighV;
         let dropRamp = (velPeak - dropLow) / (dropHigh - dropLow);
         if (dropRamp < 0) dropRamp = 0; else if (dropRamp > 1) dropRamp = 1;
         const dropTarget = dropLimiter
           ? dropMinV + (dropMaxV - dropMinV) * dropRamp
-          : (debugOn ? velDropV : VEL_DROP);
+          : velDropV;
         dropEff = glide(dropGl, dropTarget, dropGlide, dropAtkV, dropRelV, dtMs, false);
 
         // targetDamp = raw product (tgtDamp bar); damp = glided product (applied).
@@ -2389,7 +2389,7 @@
           // Velocity easing path (prediction off, or inertial settle disabled).
           // Ease toward the target; snap if smoothing is off. With prediction off
           // we use the original 0.15 easing so the comparison is faithful.
-          let kSmooth = prediction ? (debugOn ? curSmoothV : CUR_SMOOTH) : OLD_SMOOTH;
+          let kSmooth = prediction ? curSmoothV : OLD_SMOOTH;
           if (!smoothing) kSmooth = 1;
           cur[0] += (target[0] - cur[0]) * kSmooth;
           cur[1] += (target[1] - cur[1]) * kSmooth;
