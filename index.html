@@ -909,7 +909,7 @@
       <button type="button" class="rec-btn" id="recTestsBtn">● Rec tests</button>
       <button type="button" class="rec-btn" id="recVerifyBtn">Verify</button>
       <span class="rec-status" id="recStatus"></span>
-      <input type="file" id="recFileInput" accept=".gzip,.gz,application/gzip" hidden />
+      <input type="file" id="recFileInput" accept=".gzip,.gz,application/gzip,.txt,.json" hidden />
     </div>
 
     <label id="densityRow">Density <input type="range" id="densitySlider" min="12" max="60" value="34" /></label>
@@ -1150,7 +1150,6 @@
       const VEL_SMOOTH = 0.35;       // angular-velocity smoothing (0-1)
       const VEL_DET_SMOOTH = 0.3;    // EMA for the peak-detector velocity (1.0 = raw angSpeed)
       const CUR_SMOOTH = 0.9;        // light de-jitter easing toward the prediction
-      const OLD_SMOOTH = 0.15;       // pre-update easing (used when prediction off)
       const STALE_MS = 120;          // drop velocity if readings stop coming
 
       // Linear accel limiter: damp the prediction as LINEAR acceleration (m/s^2, from
@@ -2082,6 +2081,9 @@
         // Compact: x/y/z as three mini bipolar bars in one row, no per-axis text/value.
         { label: "meas", multi: () => measVec, min: -1, max: 1, bip: true },
         { label: "pred", multi: () => cur, min: -1, max: 1, bip: true },
+        // Effective easing coefficient of the velocity-easing path: curSmoothV while
+        // predicting with smoothing on, else 1 (snap). Raw Sensor mode forces both off.
+        { label: "smooth", text: () => ((prediction && smoothing) ? curSmoothV : 1).toFixed(2) },
         // Compact: frame / orientation / motion sample rates as one text row.
         { label: "fps", text: () => "f" + dbg.fps.toFixed(0) + " o" + dbg.oriHz.toFixed(0) + " m" + dbg.motHz.toFixed(0) },
       ];
@@ -2387,10 +2389,10 @@
           }
         } else {
           // Velocity easing path (prediction off, or inertial settle disabled).
-          // Ease toward the target; snap if smoothing is off. With prediction off
-          // we use the original 0.15 easing so the comparison is faithful.
-          let kSmooth = prediction ? curSmoothV : OLD_SMOOTH;
-          if (!smoothing) kSmooth = 1;
+          // Ease toward the target; snap (kSmooth = 1) if smoothing is off or when
+          // prediction is off, so Raw Sensor mode tracks the raw reading exactly.
+          let kSmooth = curSmoothV;
+          if (!prediction || !smoothing) kSmooth = 1;
           cur[0] += (target[0] - cur[0]) * kSmooth;
           cur[1] += (target[1] - cur[1]) * kSmooth;
           cur[2] += (target[2] - cur[2]) * kSmooth;
