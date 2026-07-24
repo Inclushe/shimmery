@@ -972,15 +972,15 @@
       const shimmery = new Shimmery();
       const canvas = document.getElementById("c");
       const ctx = canvas.getContext("2d");
-      // const enableBtn = document.getElementById("enable");
-      // const desktopMsg = document.getElementById("desktopMsg");
-      // const smoothCheck = document.getElementById("smoothCheck");
-      // const accelCheck = document.getElementById("accelCheck");
-      // const ajerkCheck = document.getElementById("ajerkCheck");
-      // const decelCheck = document.getElementById("decelCheck");
-      // const angAccelCheck = document.getElementById("angAccelCheck");
-      // const dropLimCheck = document.getElementById("dropLimCheck");
-      // const leadCompCheck = document.getElementById("leadCompCheck");
+      const enableBtn = document.getElementById("enable");
+      const desktopMsg = document.getElementById("desktopMsg");
+      const smoothCheck = document.getElementById("smoothCheck");
+      const accelCheck = document.getElementById("accelCheck");
+      const ajerkCheck = document.getElementById("ajerkCheck");
+      const decelCheck = document.getElementById("decelCheck");
+      const angAccelCheck = document.getElementById("angAccelCheck");
+      const dropLimCheck = document.getElementById("dropLimCheck");
+      const leadCompCheck = document.getElementById("leadCompCheck");
 
       let demoMode = false;     // split canvas: raw (left) vs predicted (right); the "Demo" mode
 
@@ -1339,12 +1339,15 @@
       //   ingestVector(v);
       // }
 
+
       // --- Sensor permission flow ------------------------------------------
       // iOS 13+ Safari (and some others) require an explicit user gesture +
       // requestPermission() before DeviceOrientationEvent fires.
+
       const needsPermission =
         typeof DeviceOrientationEvent !== "undefined" &&
         typeof DeviceOrientationEvent.requestPermission === "function";
+      console.log(needsPermission);
 
       function startListening() {
         window.addEventListener("deviceorientation", (e) => shimmery.onOrientation(e), { passive: true });
@@ -1390,7 +1393,7 @@
             if (orientState === "granted") startListening();
             else enableBtn.classList.add("show");
           })
-          .catch(() => enableBtn.classList.add("show"));
+          .catch(() => { console.log("permission rejected"); enableBtn.classList.add("show") });
       } else if (typeof DeviceOrientationEvent !== "undefined") {
         // Browsers that don't gate the sensor: just listen.
         startListening();

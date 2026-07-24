@@ -1,15 +1,6 @@
 // import { ShimmeryDebug } from "./debug.js";
 
 class ShimmeryClass {
-	enableBtn = document.getElementById("enable");
-	desktopMsg = document.getElementById("desktopMsg");
-	smoothCheck = document.getElementById("smoothCheck");
-	accelCheck = document.getElementById("accelCheck");
-	ajerkCheck = document.getElementById("ajerkCheck");
-	decelCheck = document.getElementById("decelCheck");
-	angAccelCheck = document.getElementById("angAccelCheck");
-	dropLimCheck = document.getElementById("dropLimCheck");
-	leadCompCheck = document.getElementById("leadCompCheck");
 	// Smoothing: when off, snap to the target instead of easing toward it.
 	// Orientation mode (see the segmented toggle below): "Predicted" extrapolates
 	// the reading forward; "Raw Sensor" uses the reading as-is for an A/B
@@ -530,6 +521,7 @@ class ShimmeryClass {
 	}
 
 	playbackTick(now) {
+		console.log("playbackTick");
 		if (!this.playing) return;
 		const elapsed = now - this.playWall;
 		while (
@@ -551,10 +543,11 @@ class ShimmeryClass {
 			this.playWall = now;
 			this.resetSensorState();
 		}
-		this.playRaf = requestAnimationFrame(() => this.playbackTick());
+		this.playRaf = requestAnimationFrame((ts) => this.playbackTick(ts));
 	}
 
 	startPlayback() {
+		console.log("startPlayback");
 		if (!this.recBuffer.length || this.playing) return;
 		if (this.recording) this.stopRecording();
 		this.playing = true;
@@ -562,7 +555,7 @@ class ShimmeryClass {
 		this.playWall = performance.now();
 		this.resetSensorState();
 		this.updateRecUI();
-		this.playRaf = requestAnimationFrame(() => this.playbackTick());
+		this.playRaf = requestAnimationFrame((ts) => this.playbackTick(ts));
 	}
 	stopPlayback() {
 		if (!this.playing) return;
@@ -1402,7 +1395,6 @@ class ShimmeryClass {
 	}
 
 	updateDebug() {
-		console.log("updateDebug");
 		for (const m of this.debugMetrics) {
 			if (m.text) {
 				m._text.textContent = m.text();
@@ -1783,7 +1775,9 @@ class ShimmeryClass {
 			if (e.target === this.testModal) this.testModal.classList.add("hidden");
 		});
 
-		this.recSaveBtn.addEventListener("click", this.saveRecording);
+		this.recSaveBtn.addEventListener("click", () => {
+			this.saveRecording();
+		});
 		this.recLoadBtn.addEventListener("click", () => this.recFileInput.click());
 		this.recFileInput.addEventListener("change", () => {
 			if (this.recFileInput.files && this.recFileInput.files[0])
